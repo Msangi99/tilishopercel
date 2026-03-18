@@ -47,7 +47,10 @@ class _AssignQrPageState extends State<AssignQrPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Assign Parcel QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: Text(
+          'Assign Parcel QR',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
       ),
@@ -84,12 +87,18 @@ class _AssignQrPageState extends State<AssignQrPage> {
                 children: [
                   Text(
                     'Scan parcel QR and choose whether you are the transporter or receiver.',
-                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Assigned information will appear on the parcel receipt for all viewers.',
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
@@ -169,10 +178,12 @@ class _AssignTransporterReceiverView extends StatefulWidget {
   final String? currentUserName;
 
   @override
-  State<_AssignTransporterReceiverView> createState() => _AssignTransporterReceiverViewState();
+  State<_AssignTransporterReceiverView> createState() =>
+      _AssignTransporterReceiverViewState();
 }
 
-class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiverView> {
+class _AssignTransporterReceiverViewState
+    extends State<_AssignTransporterReceiverView> {
   bool _isSaving = false;
   List<WorkerOption> _options = [];
   List<WorkerOption> _filtered = [];
@@ -181,8 +192,6 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
   String _search = '';
   Map<String, dynamic>? _parcel;
   bool _loadingParcel = true;
-  int? _transportedBusId;
-  int? _transportedBusCapacity;
 
   @override
   void initState() {
@@ -205,18 +214,15 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
           if (mounted) {
             await Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => ParcelDetailPage(parcel: _parcel!)),
+              MaterialPageRoute(
+                builder: (_) => ParcelDetailPage(parcel: _parcel!),
+              ),
             );
             if (mounted) {
               Navigator.pop(context);
             }
           }
           return;
-        }
-
-        final tbId = _parcel!['transported_bus_id'];
-        if (tbId is num) {
-          _transportedBusId = tbId.toInt();
         }
       }
     } catch (e) {
@@ -235,19 +241,6 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
       }
     }
     await _loadWorkers();
-    // Try to resolve transported bus capacity from loaded buses/options
-    if (_transportedBusId != null) {
-      // options are built from buses; capacity is not in WorkerOption, but
-      // we can approximate by looking at any worker with same busId.
-      final match = _options.firstWhere(
-        (o) => o.busId == _transportedBusId,
-        orElse: () => _options.isNotEmpty ? _options.first : WorkerOption(workerName: '', role: '', busPlate: '', routeName: '', busId: -1),
-      );
-      if (match.busId == _transportedBusId) {
-        // capacity is not exposed; leave as null for now
-        _transportedBusCapacity = null;
-      }
-    }
   }
 
   Future<void> _loadWorkers() async {
@@ -284,13 +277,15 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
             name = 'Driver #${d.toInt()}';
           }
           if (name.isNotEmpty) {
-            options.add(WorkerOption(
-              workerName: name,
-              role: 'driver',
-              busPlate: plate,
-              routeName: route,
-              busId: id,
-            ));
+            options.add(
+              WorkerOption(
+                workerName: name,
+                role: 'driver',
+                busPlate: plate,
+                routeName: route,
+                busId: id,
+              ),
+            );
           }
         }
 
@@ -304,13 +299,15 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
             name = 'Conductor #${c.toInt()}';
           }
           if (name.isNotEmpty) {
-            options.add(WorkerOption(
-              workerName: name,
-              role: 'conductor',
-              busPlate: plate,
-              routeName: route,
-              busId: id,
-            ));
+            options.add(
+              WorkerOption(
+                workerName: name,
+                role: 'conductor',
+                busPlate: plate,
+                routeName: route,
+                busId: id,
+              ),
+            );
           }
         }
 
@@ -324,13 +321,15 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
             name = 'Attendant #${a.toInt()}';
           }
           if (name.isNotEmpty) {
-            options.add(WorkerOption(
-              workerName: name,
-              role: 'attendant',
-              busPlate: plate,
-              routeName: route,
-              busId: id,
-            ));
+            options.add(
+              WorkerOption(
+                workerName: name,
+                role: 'attendant',
+                busPlate: plate,
+                routeName: route,
+                busId: id,
+              ),
+            );
           }
         }
       }
@@ -356,7 +355,9 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
       _filtered = List.of(_options);
     } else {
       _filtered = _options
-          .where((o) => o.workerName.toLowerCase().contains(_search.toLowerCase()))
+          .where(
+            (o) => o.workerName.toLowerCase().contains(_search.toLowerCase()),
+          )
           .toList();
     }
   }
@@ -367,7 +368,9 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
     if (_parcel != null && _parcel!['transported_by_name'] != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Parcel hii tayari ina transporter aliyerekodiwa. Huwezi kubadilisha hapa.'),
+          content: Text(
+            'Parcel hii tayari ina transporter aliyerekodiwa. Huwezi kubadilisha hapa.',
+          ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -409,10 +412,15 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
     if (_parcel != null) {
       final transportedName = _parcel!['transported_by_name']?.toString();
       final receivedName = _parcel!['received_by_name']?.toString();
-      if (transportedName != null && transportedName.isNotEmpty && receivedName != null && receivedName.isNotEmpty) {
+      if (transportedName != null &&
+          transportedName.isNotEmpty &&
+          receivedName != null &&
+          receivedName.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Parcel hii tayari ina transporter na imepokelewa. Huwezi kuipokea tena.'),
+            content: Text(
+              'Parcel hii tayari ina transporter na imepokelewa. Huwezi kuipokea tena.',
+            ),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -469,9 +477,18 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
 
   @override
   Widget build(BuildContext context) {
+    final transportedName = _parcel?['transported_by_name']?.toString();
+    final receivedName = _parcel?['received_by_name']?.toString();
+    final hasTransporter =
+        transportedName != null && transportedName.trim().isNotEmpty;
+    final hasReceiver = receivedName != null && receivedName.trim().isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Assign Parcel', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: Text(
+          'Assign Parcel',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
       ),
@@ -482,52 +499,81 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
           children: [
             Text(
               'Parcel: ${widget.trackingNumber}',
-              style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            if (_parcel != null && _parcel!['transported_by_name'] != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Transporter: ${_parcel!['transported_by_name']}',
-                style: GoogleFonts.poppins(fontSize: 13, color: Colors.green.shade800),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              if (_parcel!['transported_route'] != null)
-                Text(
-                  'Route: ${_parcel!['transported_route']}',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700),
-                ),
-              if (_transportedBusCapacity != null)
-                Text(
-                  'Size: $_transportedBusCapacity seats',
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700),
-                ),
+            ),
+            if (_parcel != null) ...[
+              const SizedBox(height: 12),
+              _buildStatusCard(
+                hasTransporter: hasTransporter,
+                hasReceiver: hasReceiver,
+              ),
             ],
             const SizedBox(height: 16),
             Text(
-              'Select transporter (bus worker) or mark this parcel as received.',
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade700),
+              'Chagua transporter (mfanyakazi wa basi) au weka kuwa parcel imepokelewa.',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+              ),
             ),
             const SizedBox(height: 20),
             if (_loadingWorkers || _loadingParcel)
               const Center(child: CircularProgressIndicator())
-            else if (_parcel != null && _parcel!['transported_by_name'] != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Transporter already assigned. You can only mark as receiver.',
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700),
+            else if (hasTransporter && !hasReceiver) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.blue.withValues(alpha: 0.20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue.shade700),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Transporter tayari ameshawekwa. Hatua inayofuata: weka receiver.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: _isSaving ? null : _assignReceiver,
-                icon: const Icon(Icons.person),
-                label: const Text('Mark as Receiver'),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _assignReceiver,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Weka Receiver (Received)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
             ] else ...[
               TextField(
                 decoration: InputDecoration(
                   hintText: 'Search worker name',
                   prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
                 ),
                 onChanged: (value) {
                   setState(() {
@@ -544,17 +590,25 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
                     final opt = _filtered[index];
                     final roleLabel = opt.role.isEmpty
                         ? ''
-                        : opt.role[0].toUpperCase() + opt.role.substring(1).toLowerCase();
+                        : opt.role[0].toUpperCase() +
+                              opt.role.substring(1).toLowerCase();
                     final title = roleLabel.isEmpty
                         ? opt.workerName
                         : '${opt.workerName} - $roleLabel';
                     final subtitle =
                         '${opt.busPlate} · ${opt.routeName.isEmpty ? 'No Route' : opt.routeName}';
                     return ListTile(
-                      title: Text(title, style: GoogleFonts.poppins(fontSize: 14)),
-                      subtitle: Text(subtitle,
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: Colors.grey.shade700)),
+                      title: Text(
+                        title,
+                        style: GoogleFonts.poppins(fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        subtitle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
                       onTap: () {
                         setState(() => _selected = opt);
                       },
@@ -565,7 +619,9 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
               ),
               const SizedBox(height: 8),
               ElevatedButton.icon(
-                onPressed: (_selected == null || _isSaving) ? null : _assignTransporter,
+                onPressed: (_selected == null || _isSaving)
+                    ? null
+                    : _assignTransporter,
                 icon: const Icon(Icons.local_shipping),
                 label: const Text('Assign Transporter'),
                 style: ElevatedButton.styleFrom(
@@ -586,6 +642,133 @@ class _AssignTransporterReceiverViewState extends State<_AssignTransporterReceiv
       ),
     );
   }
+
+  Widget _buildStatusCard({
+    required bool hasTransporter,
+    required bool hasReceiver,
+  }) {
+    final transporter = _parcel?['transported_by_name']?.toString();
+    final route = _parcel?['transported_route']?.toString();
+    final transportedAt = _parcel?['transported_at']?.toString();
+    final receiver = _parcel?['received_by_name']?.toString();
+    final receivedAt = _parcel?['received_at']?.toString();
+
+    Widget chip({
+      required String label,
+      required bool ok,
+      required Color color,
+      required IconData icon,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              ok ? Icons.check_circle : Icons.hourglass_bottom,
+              size: 14,
+              color: color,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              chip(
+                label: 'Transported',
+                ok: hasTransporter,
+                color: Colors.green.shade700,
+                icon: Icons.local_shipping,
+              ),
+              const SizedBox(width: 8),
+              chip(
+                label: 'Received',
+                ok: hasReceiver,
+                color: hasReceiver
+                    ? Colors.green.shade700
+                    : Colors.orange.shade800,
+                icon: Icons.inventory_2,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _kv('Transporter', hasTransporter ? (transporter ?? '—') : '—'),
+          if (route != null && route.trim().isNotEmpty) _kv('Route', route),
+          if (transportedAt != null && transportedAt.trim().isNotEmpty)
+            _kv('Transported at', transportedAt),
+          if (hasReceiver) ...[
+            const SizedBox(height: 6),
+            _kv('Receiver', receiver ?? '—'),
+            if (receivedAt != null && receivedAt.trim().isNotEmpty)
+              _kv('Received at', receivedAt),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _kv(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              k,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              v,
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ParcelReceivedSuccessPage extends StatefulWidget {
@@ -594,7 +777,8 @@ class ParcelReceivedSuccessPage extends StatefulWidget {
   final Map<String, dynamic> parcel;
 
   @override
-  State<ParcelReceivedSuccessPage> createState() => _ParcelReceivedSuccessPageState();
+  State<ParcelReceivedSuccessPage> createState() =>
+      _ParcelReceivedSuccessPageState();
 }
 
 class _ParcelReceivedSuccessPageState extends State<ParcelReceivedSuccessPage>
@@ -676,7 +860,10 @@ class _ParcelReceivedSuccessPageState extends State<ParcelReceivedSuccessPage>
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.popUntil(context, ModalRoute.withName('/dashboard'));
+                    Navigator.popUntil(
+                      context,
+                      ModalRoute.withName('/dashboard'),
+                    );
                   },
                   icon: const Icon(Icons.home),
                   label: const Text('Back to Home'),
@@ -689,4 +876,3 @@ class _ParcelReceivedSuccessPageState extends State<ParcelReceivedSuccessPage>
     );
   }
 }
-

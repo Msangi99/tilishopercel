@@ -12,7 +12,7 @@ class MyParcelsPage extends StatefulWidget {
   State<MyParcelsPage> createState() => _MyParcelsPageState();
 }
 
-class _MyParcelsPageState extends State<MyParcelsPage> {
+class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProviderStateMixin {
   List<dynamic> _parcels = [];
   Map<String, dynamic>? _pagination;
   bool _isLoading = true;
@@ -21,11 +21,45 @@ class _MyParcelsPageState extends State<MyParcelsPage> {
   DateTime _filterDate = DateTime.now();
   String _searchText = '';
   String _statusFilter = 'all';
+  int _tabIndex = 0;
+  late final TabController _tabController;
+
+  String get _type {
+    switch (_tabIndex) {
+      case 1:
+        return 'transported';
+      case 2:
+        return 'received';
+      default:
+        return 'created';
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this, initialIndex: _tabIndex);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && mounted) {
+        final next = _tabController.index;
+        if (next != _tabIndex) {
+          setState(() {
+            _tabIndex = next;
+            _parcels = [];
+            _pagination = null;
+            _error = null;
+          });
+          _loadPage(1);
+        }
+      }
+    });
     _loadPage(1);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   String get _filterDateStr => DateFormat('yyyy-MM-dd').format(_filterDate);
@@ -57,7 +91,7 @@ class _MyParcelsPageState extends State<MyParcelsPage> {
     }
 
     try {
-      final data = await ApiService.getMyParcels(page: page, date: _filterDateStr);
+      final data = await ApiService.getMyParcels(page: page, date: _filterDateStr, type: _type);
       final list = data['parcels'] is List ? data['parcels'] as List<dynamic> : [];
       final pagination = data['pagination'] is Map ? data['pagination'] as Map<String, dynamic> : null;
 
@@ -132,10 +166,30 @@ class _MyParcelsPageState extends State<MyParcelsPage> {
       ),
       body: Column(
         children: [
+          _buildTabs(),
           _buildDateFilter(isToday),
           _buildFiltersRow(),
           Expanded(child: _buildBody()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabs() {
+    return Material(
+      color: Colors.white,
+      elevation: 1,
+      child: TabBar(
+        labelColor: AppColors.primaryBlue,
+        unselectedLabelColor: Colors.grey.shade700,
+        indicatorColor: AppColors.primaryBlue,
+        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+        tabs: const [
+          Tab(text: 'Created'),
+          Tab(text: 'Transported'),
+          Tab(text: 'Received'),
+        ],
+        controller: _tabController,
       ),
     );
   }
@@ -294,6 +348,16 @@ class _MyParcelsPageState extends State<MyParcelsPage> {
     }).toList();
 
     if (filteredParcels.isEmpty) {
+      final emptyTitle = _tabIndex == 0
+          ? 'No created parcels'
+          : _tabIndex == 1
+              ? 'No transported parcels'
+              : 'No received parcels';
+      final emptySub = _tabIndex == 0
+          ? 'Parcels you create will appear here'
+          : _tabIndex == 1
+              ? 'Parcels you transported will appear here'
+              : 'Parcels you received will appear here';
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -301,12 +365,12 @@ class _MyParcelsPageState extends State<MyParcelsPage> {
             Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              'No parcels yet',
+              emptyTitle,
               style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 8),
             Text(
-              'Parcels you create will appear here',
+              emptySub,
               style: TextStyle(color: Colors.grey.shade500),
             ),
           ],

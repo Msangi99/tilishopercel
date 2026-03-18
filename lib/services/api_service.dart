@@ -211,11 +211,19 @@ class ApiService {
 
   /// Get parcels created by the current user (staff).
   /// [date] optional Y-m-d; if null, backend uses today.
-  static Future<Map<String, dynamic>> getMyParcels({int page = 1, String? date}) async {
+  /// [type] optional: created|transported|received; default is created.
+  static Future<Map<String, dynamic>> getMyParcels({
+    int page = 1,
+    String? date,
+    String type = 'created',
+  }) async {
     final headers = await _authHeaders();
     var url = '$baseUrl/api/parcels/my?page=$page';
     if (date != null && date.isNotEmpty) {
       url += '&date=$date';
+    }
+    if (type.isNotEmpty) {
+      url += '&type=$type';
     }
     final response = await http.get(
       Uri.parse(url),
