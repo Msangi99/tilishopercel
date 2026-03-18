@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:t_percel/services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -21,26 +22,52 @@ class _LoginPageState extends State<LoginPage> {
         _isLoading = true;
       });
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      try {
+        await ApiService.login(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        if (mounted) {
+          // If login succeeds, user is already verified as staff in ApiService.login
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      } catch (e) {
+        if (mounted) {
+          final errorMessage = e.toString().replaceFirst('Exception: ', '');
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: errorMessage.contains('Admin') 
+                  ? Colors.orange 
+                  : Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
 
   // Exact colors from the design
   static const Color accentColor = Color(0xFFD4AF37); // Metallic Gold
-  static const Color goldButton = Color(0xFFE5C158); // Brighter gold for button
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      // Keep background fixed when keyboard opens
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // 1. Background Image
@@ -68,6 +95,9 @@ class _LoginPageState extends State<LoginPage> {
           // 3. Main Content
           SafeArea(
             child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Form(
@@ -141,7 +171,7 @@ class _LoginPageState extends State<LoginPage> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Text(
-                                'Member Login',
+                                'Login',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 24,
@@ -298,34 +328,34 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
+          color: Colors.black.withOpacity(0.08),
+          width: 0.8,
         ),
       ),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
         validator: validator,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Colors.black87, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-          prefixIcon: Icon(icon, color: Colors.white54, size: 22),
+          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          prefixIcon: Icon(icon, color: Colors.grey.shade700, size: 20),
           suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
                     obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: Colors.white54,
-                    size: 20,
+                    color: Colors.grey.shade700,
+                    size: 18,
                   ),
                   onPressed: onToggleVisibility,
                 )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
           errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
         ),
       ),

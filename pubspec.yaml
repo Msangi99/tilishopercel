@@ -1,5 +1,5 @@
 name: t_percel
-description: "A new Flutter project."
+description: "Tilisho Percel mobile app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -34,6 +34,12 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  http: ^1.4.0
+  shared_preferences: ^2.5.0
+  intl: ^0.19.0
+  qr_flutter: ^4.1.0
+  google_fonts: ^6.2.1
+  mobile_scanner: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +51,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -60,6 +67,12 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - asset/
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "asset/logo.webp"
+  remove_alpha_ios: true
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
