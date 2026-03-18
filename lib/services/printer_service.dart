@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:blue_thermal_printer_plus/blue_thermal_printer_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sunmi_printer_plus/sunmi_printer_plus.dart';
@@ -33,7 +33,7 @@ class PrinterService {
   static const _kBtAddress = 'printer_bt_address';
   static const _kBtName = 'printer_bt_name';
 
-  final BlueThermalPrinter _bt = BlueThermalPrinter.instance;
+  final BlueThermalPrinterPlus _bt = BlueThermalPrinterPlus();
 
   Future<PrinterSelection> loadSelection() async {
     final prefs = await SharedPreferences.getInstance();
@@ -206,35 +206,39 @@ class PrinterService {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
 
-    _bt.printCustom('TILISHO PARCEL', 3, 1);
-    _bt.printNewLine();
-    _bt.printCustom(_str(parcel['tracking_number']), 2, 1);
-    _bt.printNewLine();
-    _bt.printCustom('From: ${_str(parcel['origin'])}', 1, 0);
-    _bt.printCustom('To: ${_str(parcel['destination'])}', 1, 0);
-    _bt.printCustom('Sender: ${_str(parcel['sender_name'])}', 1, 0);
-    _bt.printCustom('Phone: ${_str(parcel['sender_phone'])}', 1, 0);
-    _bt.printCustom('Receiver: ${_str(parcel['receiver_name'])}', 1, 0);
-    _bt.printCustom(
-      'Phone: ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
-      1,
-      0,
-    );
-    _bt.printCustom('Ship Date: ${_str(parcel['travel_date'])}', 1, 0);
+    final items = <PrintItem>[
+      PrintItem.text('TILISHO PARCEL', size: 2, align: 1),
+      PrintItem.text('', align: 1),
+      PrintItem.text(_str(parcel['tracking_number']), size: 1, align: 1),
+      PrintItem.text('', align: 1),
+      PrintItem.text('From: ${_str(parcel['origin'])}'),
+      PrintItem.text('To: ${_str(parcel['destination'])}'),
+      PrintItem.text('Sender: ${_str(parcel['sender_name'])}'),
+      PrintItem.text('Phone: ${_str(parcel['sender_phone'])}'),
+      PrintItem.text('Receiver: ${_str(parcel['receiver_name'])}'),
+      PrintItem.text(
+        'Phone: ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
+      ),
+      PrintItem.text('Ship Date: ${_str(parcel['travel_date'])}'),
+    ];
     final desc = parcel['description']?.toString();
     if (desc != null && desc.trim().isNotEmpty) {
-      _bt.printCustom('Cargo: $desc', 1, 0);
+      items.add(PrintItem.text('Cargo: $desc'));
     }
-    _bt.printCustom(
-      'Fare: TZS ${_amount(parcel['amount']).toStringAsFixed(0)}',
-      2,
-      0,
-    );
-    _bt.printNewLine();
-    _bt.printCustom('Msaada: 0750015630', 1, 1);
-    _bt.printCustom('www.tilishosafari.co.tz', 1, 1);
-    _bt.printNewLine();
-    _bt.paperCut();
+
+    items.addAll([
+      PrintItem.text(
+        'Fare: TZS ${_amount(parcel['amount']).toStringAsFixed(0)}',
+        size: 1,
+        align: 0,
+      ),
+      PrintItem.text('', align: 1),
+      PrintItem.text('Msaada: 0750015630', align: 1),
+      PrintItem.text('www.tilishosafari.co.tz', align: 1),
+      PrintItem.text('', align: 1),
+    ]);
+
+    await _bt.print(items: items, protocol: PrinterProtocol.escPos);
   }
 
   static String _str(dynamic v) => v?.toString() ?? '—';
