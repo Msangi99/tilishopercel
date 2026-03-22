@@ -24,7 +24,7 @@ class _SearchParcelPageState extends State<SearchParcelPage> {
       final parcel = data['parcel'] as Map<String, dynamic>?;
       if (!mounted) return;
       if (parcel == null) {
-        throw Exception('Hakuna parcel iliyo patikana kwa ID hii');
+        throw Exception('No parcel found for this tracking number');
       }
       await Navigator.push(
         context,

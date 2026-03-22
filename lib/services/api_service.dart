@@ -80,14 +80,14 @@ class ApiService {
       final isAdmin = data['data']['user']['is_admin'] ?? false;
       
       if (userRole != 'staff' || isAdmin) {
-        throw Exception('Hii ni akaunti ya Admin. Tafadhali tumia admin portal.');
+        throw Exception('This is an admin account. Please use the admin portal.');
       }
       
       await _saveToken(data['data']['token']);
       await _saveUser(data['data']['user']);
       return data['data'];
     } else {
-      throw Exception(data['message'] ?? 'Imeshindikana kuingia');
+      throw Exception(data['message'] ?? 'Sign-in failed');
     }
   }
 
@@ -124,10 +124,10 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
-    throw Exception('Imeshindikana kupata taarifa');
+    throw Exception('Could not load user information');
   }
 
   /// Update current user profile. Only include fields to change.
@@ -166,14 +166,18 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final err = jsonDecode(response.body);
-    throw Exception(err['message'] ?? 'Imeshindikana kusasisha wasifu');
+    throw Exception(err['message'] ?? 'Could not update profile');
   }
 
-  /// Verify the current user's password (Sanctum session).
+  /// Verify the current user's password via [POST /api/user/verify-password].
+  ///
+  /// The server checks [Hash::check] against the authenticated user's row in
+  /// Laravel's default database (in tilishoweb dev this is typically
+  /// `database/database.sqlite` when `DB_CONNECTION=sqlite`).
   static Future<void> verifyPassword(String password) async {
     final headers = await _authHeaders();
     final response = await http.post(
@@ -191,11 +195,11 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final err = jsonDecode(response.body);
-    throw Exception(err['message'] ?? 'Password si sahihi');
+    throw Exception(err['message'] ?? 'Incorrect password');
   }
 
   /// Check if current user is staff
@@ -264,10 +268,10 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
-    throw Exception('Imeshindikana kupata parcels');
+    throw Exception('Could not load parcels');
   }
 
   /// Create a new parcel
@@ -278,8 +282,10 @@ class ApiService {
     required String creatorOffice,
     required String senderName,
     required String senderPhone,
+    String? senderEmail,
     required String receiverName,
     required String receiverPhone,
+    String? receiverEmail,
     required String origin,
     required String destination,
     required double amount,
@@ -287,24 +293,33 @@ class ApiService {
     String? travelDate,
   }) async {
     final headers = await _authHeaders();
+    final payload = <String, dynamic>{
+      'parcel_name': parcelName,
+      'quantity': quantity,
+      'weight_band': weightBand,
+      'creator_office': creatorOffice,
+      'sender_name': senderName,
+      'sender_phone': senderPhone,
+      'receiver_name': receiverName,
+      'receiver_phone': receiverPhone,
+      'origin': origin,
+      'destination': destination,
+      'amount': amount,
+      'description': description,
+      'travel_date': travelDate,
+    };
+    final se = senderEmail?.trim();
+    if (se != null && se.isNotEmpty) {
+      payload['sender_email'] = se;
+    }
+    final re = receiverEmail?.trim();
+    if (re != null && re.isNotEmpty) {
+      payload['receiver_email'] = re;
+    }
     final response = await http.post(
       Uri.parse('$baseUrl/api/parcels'),
       headers: headers,
-      body: jsonEncode({
-        'parcel_name': parcelName,
-        'quantity': quantity,
-        'weight_band': weightBand,
-        'creator_office': creatorOffice,
-        'sender_name': senderName,
-        'sender_phone': senderPhone,
-        'receiver_name': receiverName,
-        'receiver_phone': receiverPhone,
-        'origin': origin,
-        'destination': destination,
-        'amount': amount,
-        'description': description,
-        'travel_date': travelDate,
-      }),
+      body: jsonEncode(payload),
     );
 
     if (response.statusCode == 201) {
@@ -322,13 +337,13 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final err = _decodeJsonObject(response.body);
     final msg = err?['message']?.toString() ??
         err?['error']?.toString() ??
-        'Imeshindikana kuunda parcel (${response.statusCode})';
+        'Could not create parcel (${response.statusCode})';
     throw Exception(msg);
   }
 
@@ -352,11 +367,11 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final errorData = jsonDecode(response.body);
-    throw Exception(errorData['message'] ?? 'Imeshindikana kuscan parcel');
+    throw Exception(errorData['message'] ?? 'Could not scan parcel');
   }
 
   /// View parcel details by tracking number without changing its status.
@@ -376,11 +391,11 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final errorData = jsonDecode(response.body);
-    throw Exception(errorData['message'] ?? 'Imeshindikana kupata parcel');
+    throw Exception(errorData['message'] ?? 'Could not load parcel');
   }
 
   /// Assign transporter (selected worker on current staff's assigned bus) to a parcel.
@@ -409,11 +424,11 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final errorData = jsonDecode(response.body);
-    throw Exception(errorData['message'] ?? 'Imeshindikana kuhifadhi usafirishaji');
+    throw Exception(errorData['message'] ?? 'Could not save transporter assignment');
   }
 
   /// Assign receiver (current staff) to a parcel.
@@ -434,11 +449,11 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     final errorData = jsonDecode(response.body);
-    throw Exception(errorData['message'] ?? 'Imeshindikana kupokea parcel');
+    throw Exception(errorData['message'] ?? 'Could not mark parcel as received');
   }
 
   /// Get available buses
@@ -451,18 +466,18 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     if (response.statusCode == 200) {
       final decoded = _parseJson(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Imeshindikana kupata buses (jibu lisilotarajiwa)');
+        throw Exception('Could not load buses (unexpected response)');
       }
       final data = decoded;
       final status = data['status'] ?? data['Status'];
       if (status != 'success') {
-        final msg = data['message'] ?? 'Imeshindikana kupata buses';
+        final msg = data['message'] ?? 'Could not load buses';
         throw Exception(msg);
       }
       final dataPayload = data['data'] ?? data['Data'];
@@ -476,7 +491,7 @@ class ApiService {
 
     final err = _parseJson(response.body);
     final msg = err is Map ? err['message'] : null;
-    throw Exception(msg ?? 'Imeshindikana kupata buses (${response.statusCode})');
+    throw Exception(msg ?? 'Could not load buses (${response.statusCode})');
   }
 
   /// Get available routes
@@ -489,18 +504,18 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
     if (response.statusCode == 200) {
       final decoded = _parseJson(response.body);
       if (decoded is! Map<String, dynamic>) {
-        throw Exception('Imeshindikana kupata routes (jibu lisilotarajiwa)');
+        throw Exception('Could not load routes (unexpected response)');
       }
       final data = decoded;
       final status = data['status'] ?? data['Status'];
       if (status != 'success') {
-        final msg = data['message'] ?? 'Imeshindikana kupata routes';
+        final msg = data['message'] ?? 'Could not load routes';
         throw Exception(msg);
       }
       final dataPayload = data['data'] ?? data['Data'];
@@ -514,7 +529,7 @@ class ApiService {
 
     final err = _parseJson(response.body);
     final msg = err is Map ? err['message'] : null;
-    throw Exception(msg ?? 'Imeshindikana kupata routes (${response.statusCode})');
+    throw Exception(msg ?? 'Could not load routes (${response.statusCode})');
   }
 
   static dynamic _parseJson(String body) {
@@ -553,9 +568,9 @@ class ApiService {
 
     if (response.statusCode == 401) {
       await _clearAuth();
-      throw Exception('Session imeisha, tafadhali ingia tena');
+      throw Exception('Session expired. Please sign in again.');
     }
 
-    throw Exception('Imeshindikana kupata takwimu');
+    throw Exception('Could not load dashboard statistics');
   }
 }

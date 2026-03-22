@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:blue_thermal_printer_plus/blue_thermal_printer_plus.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sunmi_printer_plus/sunmi_printer_plus.dart';
 
@@ -147,6 +151,209 @@ class PrinterService {
     throw Exception('No printer selected');
   }
 
+  /// Opens the system print UI when possible; otherwise opens the share sheet so the
+  /// user can save or print the PDF in another app (common on Android without a print service).
+  ///
+  /// Returns `true` if the share sheet was used (print UI was skipped or failed).
+  Future<bool> printReceiptAsPdf(Map<String, dynamic> parcel) async {
+    final safeName = _pdfFileName(parcel);
+    final info = await Printing.info();
+
+    if (info.canPrint) {
+      try {
+        await Printing.layoutPdf(
+          name: safeName,
+          format: PdfPageFormat.a4,
+          dynamicLayout: false,
+          onLayout: (PdfPageFormat format) async =>
+              buildReceiptPdfBytes(parcel, format),
+        );
+        return false;
+      } catch (_) {
+        // e.g. no print spooler, or platform channel failure — try share below
+      }
+    }
+
+    if (info.canShare) {
+      final bytes = await buildReceiptPdfBytes(parcel, PdfPageFormat.a4);
+      final ok = await Printing.sharePdf(
+        bytes: bytes,
+        filename: safeName,
+        subject: 'Tilisho parcel receipt',
+        body: 'Parcel receipt (PDF)',
+      );
+      if (!ok) {
+        throw Exception('Could not open PDF share sheet.');
+      }
+      return true;
+    }
+
+    throw Exception(
+      'PDF printing is not available on this device. Try updating the app or OS.',
+    );
+  }
+
+  static String _pdfFileName(Map<String, dynamic> parcel) {
+    final raw = parcel['tracking_number']?.toString().trim() ?? 'receipt';
+    final slug = raw.replaceAll(RegExp(r'[^\w\-]+'), '_');
+    return 'tilisho_parcel_$slug.pdf';
+  }
+
+  /// Builds a single-page PDF matching the thermal receipt content.
+  Future<Uint8List> buildReceiptPdfBytes(
+    Map<String, dynamic> parcel, [
+    PdfPageFormat format = PdfPageFormat.a4,
+  ]) async {
+    final tracking = _str(parcel['tracking_number']);
+    final qrData = tracking == '—' ? 'tilisho-parcel' : tracking;
+
+    final senderEmail = parcel['sender_email']?.toString().trim();
+    final receiverEmail = parcel['receiver_email']?.toString().trim();
+    final pn = parcel['parcel_name']?.toString();
+    final q = parcel['quantity'];
+    final off = parcel['creator_office']?.toString();
+    final desc = parcel['description']?.toString();
+    final transportedPhone = parcel['transported_by_phone']?.toString().trim();
+    final receivedStaffPhone = parcel['received_by_phone']?.toString().trim();
+    final hasTransportedAt = parcel['transported_at'] != null;
+    final hasReceivedAt = parcel['received_at'] != null;
+
+    final doc = pw.Document();
+    doc.addPage(
+      pw.Page(
+        pageFormat: format,
+        margin: const pw.EdgeInsets.all(48),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.Center(
+                child: pw.Text(
+                  'TILISHO PARCEL',
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 12),
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.qrCode(),
+                  data: qrData,
+                  width: 112,
+                  height: 112,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Center(
+                child: pw.Text(
+                  tracking,
+                  style: pw.TextStyle(
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 16),
+              pw.Divider(color: PdfColors.grey400),
+              pw.SizedBox(height: 8),
+              _pdfLine('From', _str(parcel['origin'])),
+              _pdfLine('To', _str(parcel['destination'])),
+              _pdfLine(
+                'Sender',
+                '${_str(parcel['sender_name'])} · ${_str(parcel['sender_phone'])}',
+              ),
+              if (senderEmail != null && senderEmail.isNotEmpty)
+                _pdfLine('Sender email', senderEmail),
+              _pdfLine(
+                'Receiver',
+                '${_str(parcel['receiver_name'])} · ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
+              ),
+              if (receiverEmail != null && receiverEmail.isNotEmpty)
+                _pdfLine('Receiver email', receiverEmail),
+              _pdfLine('Ship date', _str(parcel['travel_date'])),
+              if (pn != null && pn.trim().isNotEmpty) _pdfLine('Parcel', pn),
+              if (q != null)
+                _pdfLine(
+                  'Qty / weight',
+                  '$q · ${_weightBand(parcel['weight_band'])}',
+                ),
+              if (off != null && off.trim().isNotEmpty) _pdfLine('Office', off),
+              if (desc != null && desc.trim().isNotEmpty) _pdfLine('Cargo', desc),
+              if (hasTransportedAt) ...[
+                pw.SizedBox(height: 4),
+                _pdfLine('Handover', 'Transport'),
+                _pdfLine('Given to', _str(parcel['transported_by_name'])),
+                if (transportedPhone != null && transportedPhone.isNotEmpty)
+                  _pdfLine('Transporter phone', transportedPhone),
+                _pdfLine('Handed over at', _str(parcel['transported_at'])),
+              ],
+              if (hasReceivedAt) ...[
+                _pdfLine('Received by', _str(parcel['received_by_name'])),
+                if (receivedStaffPhone != null && receivedStaffPhone.isNotEmpty)
+                  _pdfLine('Staff receiver phone', receivedStaffPhone),
+                _pdfLine('Received at', _str(parcel['received_at'])),
+              ],
+              _pdfLine(
+                'Fare',
+                'TZS ${_amount(parcel['amount']).toStringAsFixed(0)}',
+                emphasize: true,
+              ),
+              pw.Spacer(),
+              pw.Divider(color: PdfColors.grey300),
+              pw.SizedBox(height: 8),
+              pw.Center(
+                child: pw.Text(
+                  'Support: 0750015630',
+                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  'www.tilishosafari.co.tz',
+                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return await doc.save();
+  }
+
+  static pw.Widget _pdfLine(String label, String value, {bool emphasize = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 6),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(
+            width: 100,
+            child: pw.Text(
+              '$label:',
+              style: pw.TextStyle(
+                fontSize: 10,
+                color: PdfColors.grey700,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Text(
+              value,
+              style: pw.TextStyle(
+                fontSize: emphasize ? 12 : 11,
+                fontWeight: emphasize ? pw.FontWeight.bold : pw.FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _printSunmi(Map<String, dynamic> parcel) async {
     await SunmiPrinter.initPrinter();
     await SunmiPrinter.setAlignment(SunmiPrintAlign.CENTER);
@@ -165,9 +372,17 @@ class PrinterService {
     await SunmiPrinter.printText(
       'Sender: ${_str(parcel['sender_name'])} ${_str(parcel['sender_phone'])}',
     );
+    final senderEmail = parcel['sender_email']?.toString().trim();
+    if (senderEmail != null && senderEmail.isNotEmpty) {
+      await SunmiPrinter.printText('Sender email: $senderEmail');
+    }
     await SunmiPrinter.printText(
       'Receiver: ${_str(parcel['receiver_name'])} ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
     );
+    final receiverEmail = parcel['receiver_email']?.toString().trim();
+    if (receiverEmail != null && receiverEmail.isNotEmpty) {
+      await SunmiPrinter.printText('Receiver email: $receiverEmail');
+    }
     await SunmiPrinter.printText('Ship Date: ${_str(parcel['travel_date'])}');
     final pn = parcel['parcel_name']?.toString();
     if (pn != null && pn.trim().isNotEmpty) {
@@ -185,13 +400,30 @@ class PrinterService {
     if (desc != null && desc.trim().isNotEmpty) {
       await SunmiPrinter.printText('Cargo: $desc');
     }
+    if (parcel['transported_at'] != null) {
+      await SunmiPrinter.printText('--- Handover ---');
+      await SunmiPrinter.printText('Given to: ${_str(parcel['transported_by_name'])}');
+      final tp = parcel['transported_by_phone']?.toString().trim();
+      if (tp != null && tp.isNotEmpty) {
+        await SunmiPrinter.printText('Transporter tel: $tp');
+      }
+      await SunmiPrinter.printText('At: ${_str(parcel['transported_at'])}');
+    }
+    if (parcel['received_at'] != null) {
+      await SunmiPrinter.printText('Received by: ${_str(parcel['received_by_name'])}');
+      final rp = parcel['received_by_phone']?.toString().trim();
+      if (rp != null && rp.isNotEmpty) {
+        await SunmiPrinter.printText('Staff receiver tel: $rp');
+      }
+      await SunmiPrinter.printText('Received at: ${_str(parcel['received_at'])}');
+    }
     await SunmiPrinter.printText(
       'Fare: TZS ${_amount(parcel['amount']).toStringAsFixed(0)}',
     );
 
     await SunmiPrinter.lineWrap(2);
     await SunmiPrinter.setAlignment(SunmiPrintAlign.CENTER);
-    await SunmiPrinter.printText('Msaada: 0750015630');
+    await SunmiPrinter.printText('Support: 0750015630');
     await SunmiPrinter.printText('www.tilishosafari.co.tz');
     await SunmiPrinter.lineWrap(3);
     await SunmiPrinter.cut();
@@ -227,10 +459,16 @@ class PrinterService {
       PrintItem.text('To: ${_str(parcel['destination'])}'),
       PrintItem.text('Sender: ${_str(parcel['sender_name'])}'),
       PrintItem.text('Phone: ${_str(parcel['sender_phone'])}'),
+      if (parcel['sender_email'] != null &&
+          parcel['sender_email'].toString().trim().isNotEmpty)
+        PrintItem.text('Email: ${parcel['sender_email']}'),
       PrintItem.text('Receiver: ${_str(parcel['receiver_name'])}'),
       PrintItem.text(
         'Phone: ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
       ),
+      if (parcel['receiver_email'] != null &&
+          parcel['receiver_email'].toString().trim().isNotEmpty)
+        PrintItem.text('Email: ${parcel['receiver_email']}'),
       PrintItem.text('Ship Date: ${_str(parcel['travel_date'])}'),
     ];
     final pn = parcel['parcel_name']?.toString();
@@ -252,6 +490,24 @@ class PrinterService {
       items.add(PrintItem.text('Cargo: $desc'));
     }
 
+    if (parcel['transported_at'] != null) {
+      items.add(PrintItem.text('--- Handover ---'));
+      items.add(PrintItem.text('Given to: ${_str(parcel['transported_by_name'])}'));
+      final tp = parcel['transported_by_phone']?.toString().trim();
+      if (tp != null && tp.isNotEmpty) {
+        items.add(PrintItem.text('Transporter tel: $tp'));
+      }
+      items.add(PrintItem.text('At: ${_str(parcel['transported_at'])}'));
+    }
+    if (parcel['received_at'] != null) {
+      items.add(PrintItem.text('Rcvd by: ${_str(parcel['received_by_name'])}'));
+      final rp = parcel['received_by_phone']?.toString().trim();
+      if (rp != null && rp.isNotEmpty) {
+        items.add(PrintItem.text('Staff rcvr tel: $rp'));
+      }
+      items.add(PrintItem.text('Rcvd at: ${_str(parcel['received_at'])}'));
+    }
+
     items.addAll([
       PrintItem.text(
         'Fare: TZS ${_amount(parcel['amount']).toStringAsFixed(0)}',
@@ -259,7 +515,7 @@ class PrinterService {
         align: 0,
       ),
       PrintItem.text('', align: 1),
-      PrintItem.text('Msaada: 0750015630', align: 1),
+      PrintItem.text('Support: 0750015630', align: 1),
       PrintItem.text('www.tilishosafari.co.tz', align: 1),
       PrintItem.text('', align: 1),
     ]);

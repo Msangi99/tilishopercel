@@ -5,6 +5,14 @@ import 'package:t_percel/main.dart';
 import 'package:t_percel/screens/parcel_receipt_page.dart';
 import 'package:t_percel/services/api_service.dart';
 
+String? _optionalEmailValidator(String? value) {
+  final v = value?.trim() ?? '';
+  if (v.isEmpty) return null;
+  final email = RegExp(r'^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$');
+  if (!email.hasMatch(v)) return 'Enter a valid email';
+  return null;
+}
+
 class NewParcelPage extends StatefulWidget {
   const NewParcelPage({super.key});
 
@@ -13,13 +21,21 @@ class NewParcelPage extends StatefulWidget {
 }
 
 class _NewParcelPageState extends State<NewParcelPage> {
-  final _formKey = GlobalKey<FormState>();
-  
+  final List<GlobalKey<FormState>> _wizardFormKeys = [
+    GlobalKey<FormState>(),
+    GlobalKey<FormState>(),
+    GlobalKey<FormState>(),
+  ];
+  late final PageController _wizardPageController;
+  int _wizardStep = 0;
+
   // Form controllers
   final _senderNameController = TextEditingController();
   final _senderPhoneController = TextEditingController();
+  final _senderEmailController = TextEditingController();
   final _receiverNameController = TextEditingController();
   final _receiverPhoneController = TextEditingController();
+  final _receiverEmailController = TextEditingController();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _parcelNameController = TextEditingController();
@@ -42,7 +58,63 @@ class _NewParcelPageState extends State<NewParcelPage> {
   @override
   void initState() {
     super.initState();
+    _wizardPageController = PageController();
     _loadData();
+  }
+
+  void _wizardSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Future<void> _wizardNext() async {
+    FocusScope.of(context).unfocus();
+    final ok = _wizardFormKeys[_wizardStep].currentState?.validate() ?? false;
+    if (!ok) return;
+    if (_wizardStep == 0) {
+      setState(() => _wizardStep = 1);
+      await _wizardPageController.animateToPage(
+        1,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    if (_wizardStep == 1) {
+      setState(() => _wizardStep = 2);
+      await _wizardPageController.animateToPage(
+        2,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+    if (_routes.isEmpty) {
+      _wizardSnack('No routes available. Cannot create parcel.');
+      return;
+    }
+    if (_selectedOrigin == null || _selectedDestination == null) {
+      _wizardSnack('Select origin and destination.');
+      return;
+    }
+    await _openReviewAndConfirm();
+  }
+
+  void _wizardBack() {
+    FocusScope.of(context).unfocus();
+    if (_wizardStep <= 0) return;
+    setState(() => _wizardStep -= 1);
+    _wizardPageController.previousPage(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
   }
   
   Future<void> _loadData() async {
@@ -106,7 +178,10 @@ class _NewParcelPageState extends State<NewParcelPage> {
   }
 
   Future<void> _openReviewAndConfirm() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Do not re-validate earlier wizard steps here: PageView only keeps the
+    // current page built, so FormState for other pages is often null and
+    // validate() would falsely fail. Steps are already validated on each
+    // "Continue" tap; step 3 is validated in _wizardNext before this runs.
     if (_routes.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,8 +212,14 @@ class _NewParcelPageState extends State<NewParcelPage> {
       creatorOffice: _creatorOfficeController.text.trim(),
       senderName: _senderNameController.text.trim(),
       senderPhone: _senderPhoneController.text.trim(),
+      senderEmail: _senderEmailController.text.trim().isEmpty
+          ? null
+          : _senderEmailController.text.trim(),
       receiverName: _receiverNameController.text.trim(),
       receiverPhone: _receiverPhoneController.text.trim(),
+      receiverEmail: _receiverEmailController.text.trim().isEmpty
+          ? null
+          : _receiverEmailController.text.trim(),
       origin: _selectedOrigin!,
       destination: _selectedDestination!,
       amount: double.parse(_amountController.text),
@@ -155,12 +236,16 @@ class _NewParcelPageState extends State<NewParcelPage> {
           snapshot: snapshot,
           onSuccess: (Map<String, dynamic> parcel) {
             if (!mounted) return;
-            _formKey.currentState!.reset();
+            for (final k in _wizardFormKeys) {
+              k.currentState?.reset();
+            }
             _quantityController.text = '1';
             _senderNameController.clear();
             _senderPhoneController.clear();
+            _senderEmailController.clear();
             _receiverNameController.clear();
             _receiverPhoneController.clear();
+            _receiverEmailController.clear();
             _amountController.clear();
             _descriptionController.clear();
             _parcelNameController.clear();
@@ -168,9 +253,11 @@ class _NewParcelPageState extends State<NewParcelPage> {
             if (_routes.isNotEmpty && _routes.first is Map) {
               final first = _routes.first as Map;
               setState(() {
+                _wizardStep = 0;
                 _selectedOrigin = first['from']?.toString();
                 _selectedDestination = first['to']?.toString();
               });
+              _wizardPageController.jumpToPage(0);
             }
             Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
@@ -185,290 +272,475 @@ class _NewParcelPageState extends State<NewParcelPage> {
   
   @override
   Widget build(BuildContext context) {
+    const stepHints = [
+      'Name, quantity, weight, and registration office',
+      'Sender and receiver details',
+      'Route, travel date, amount, and notes',
+    ];
+    const stepTitles = [
+      'Parcel details',
+      'Sender & receiver',
+      'Route & payment',
+    ];
+
     return Scaffold(
+      backgroundColor: const Color(0xFFEEF1F7),
       appBar: AppBar(
-        title: Text('Create New Parcel', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        title: Text(
+          'Create parcel',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadData,
-            tooltip: 'Refresh Data',
+            tooltip: 'Refresh',
           ),
         ],
       ),
       body: _isDataLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _handleRefresh,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      _buildSectionTitle('Parcel details'),
-                      const SizedBox(height: 8),
-                      _buildTextField(
-                        controller: _parcelNameController,
-                        label: 'Parcel name',
-                        icon: Icons.inventory_2_outlined,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Enter parcel name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              controller: _quantityController,
-                              label: 'Quantity',
-                              icon: Icons.numbers,
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Required';
-                                }
-                                final n = int.tryParse(value.trim());
-                                if (n == null || n < 1) {
-                                  return 'Min 1';
-                                }
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildWeightDropdown(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _buildTextField(
-                        controller: _creatorOfficeController,
-                        label: 'Creator office',
-                        icon: Icons.storefront_outlined,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Enter office name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      // Sender Information Section
-                      _buildSectionTitle('Sender Information'),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      controller: _senderNameController,
-                      label: 'Sender Name',
-                      icon: Icons.person,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter sender name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTextField(
-                      controller: _senderPhoneController,
-                      label: 'Sender Phone',
-                      icon: Icons.phone,
-                      keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter phone number';
-                        }
-                        if (!RegExp(r'^\+?[0-9]{10,15}$').hasMatch(value)) {
-                          return 'Please enter valid phone number';
-                        }
-                        return null;
-                      },
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Receiver Information Section
-                    _buildSectionTitle('Receiver Information'),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      controller: _receiverNameController,
-                      label: 'Receiver Name',
-                      icon: Icons.person_outline,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter receiver name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTextField(
-                      controller: _receiverPhoneController,
-                      label: 'Receiver Phone',
-                      icon: Icons.phone_outlined,
-                      keyboardType: TextInputType.phone,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter phone number';
-                        }
-                        if (!RegExp(r'^\+?[0-9]{10,15}$').hasMatch(value)) {
-                          return 'Please enter valid phone number';
-                        }
-                        return null;
-                      },
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Route Information Section
-                    _buildSectionTitle('Route Information'),
-                    const SizedBox(height: 8),
-                    if (_routes.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.orange.shade700),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'No routes available. Please add routes in admin or contact admin.',
-                                style: TextStyle(color: Colors.orange.shade700),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildDropdown(
-                              label: 'From',
-                              hint: 'Select origin',
-                              items: _origins.toList(),
-                              value: _selectedOrigin,
-                              onChanged: (value) {
-                                setState(() => _selectedOrigin = value);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildDropdown(
-                              label: 'To',
-                              hint: 'Select destination',
-                              items: _destinations.toList(),
-                              value: _selectedDestination,
-                              onChanged: (value) {
-                                setState(() => _selectedDestination = value);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (_routes.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      _buildTravelDateField(),
-                    ],
-                    
-                    const SizedBox(height: 24),
-                    
-                    // Amount and Description
-                    _buildSectionTitle('Payment & Notes'),
-                    const SizedBox(height: 8),
-                    _buildTextField(
-                      controller: _amountController,
-                      label: 'Amount (TZS)',
-                      icon: Icons.attach_money,
-                      keyboardType: TextInputType.number,
-                      prefix: 'TZS ',
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter amount';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter valid amount';
-                        }
-                        if (double.parse(value) <= 0) {
-                          return 'Amount must be greater than 0';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTextField(
-                      controller: _descriptionController,
-                      label: 'Description (Optional)',
-                      icon: Icons.description,
-                      maxLines: 3,
-                    ),
-                    
-                    const SizedBox(height: 20),
-                        ],
-                      ),
-                    ),
-                    // Outside Form: avoids keyboard Enter / web treating action as form submit
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          FocusScope.of(context).unfocus();
-                          _openReviewAndConfirm();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade800,
-                          foregroundColor: Colors.white,
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text(
-                          'CONTINUE TO SUMMARY',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildWizardBanner(
+                  title: stepTitles[_wizardStep],
+                  subtitle: stepHints[_wizardStep],
                 ),
-              ),
+                Expanded(
+                  child: PageView(
+                    controller: _wizardPageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _handleRefresh,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: Form(
+                            key: _wizardFormKeys[0],
+                            child: _buildWizardCard(
+                              icon: Icons.inventory_2_outlined,
+                              children: [
+                                _buildSectionTitle('Parcel details'),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _parcelNameController,
+                                  label: 'Parcel name',
+                                  icon: Icons.inventory_2_outlined,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Enter parcel name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: _buildTextField(
+                                        controller: _quantityController,
+                                        label: 'Quantity',
+                                        icon: Icons.numbers,
+                                        keyboardType: TextInputType.number,
+                                        validator: (value) {
+                                          if (value == null || value.trim().isEmpty) {
+                                            return 'Required';
+                                          }
+                                          final n = int.tryParse(value.trim());
+                                          if (n == null || n < 1) {
+                                            return 'Min 1';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: _buildWeightDropdown()),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _creatorOfficeController,
+                                  label: 'Creator office',
+                                  icon: Icons.storefront_outlined,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return 'Enter office name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _handleRefresh,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: Form(
+                            key: _wizardFormKeys[1],
+                            child: _buildWizardCard(
+                              icon: Icons.people_outline_rounded,
+                              children: [
+                                _buildSectionTitle('Sender'),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _senderNameController,
+                                  label: 'Sender name',
+                                  icon: Icons.person,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter sender name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _senderPhoneController,
+                                  label: 'Sender phone',
+                                  icon: Icons.phone,
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter phone number';
+                                    }
+                                    if (!RegExp(r'^\+?[0-9]{10,15}$').hasMatch(value)) {
+                                      return 'Please enter valid phone number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _senderEmailController,
+                                  label: 'Sender email (optional)',
+                                  icon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: _optionalEmailValidator,
+                                ),
+                                const SizedBox(height: 22),
+                                _buildSectionTitle('Receiver'),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _receiverNameController,
+                                  label: 'Receiver name',
+                                  icon: Icons.person_outline,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter receiver name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _receiverPhoneController,
+                                  label: 'Receiver phone',
+                                  icon: Icons.phone_outlined,
+                                  keyboardType: TextInputType.phone,
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter phone number';
+                                    }
+                                    if (!RegExp(r'^\+?[0-9]{10,15}$').hasMatch(value)) {
+                                      return 'Please enter valid phone number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _receiverEmailController,
+                                  label: 'Receiver email (optional)',
+                                  icon: Icons.alternate_email_rounded,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: _optionalEmailValidator,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _handleRefresh,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: Form(
+                            key: _wizardFormKeys[2],
+                            child: _buildWizardCard(
+                              icon: Icons.alt_route_rounded,
+                              children: [
+                                _buildSectionTitle('Route'),
+                                const SizedBox(height: 12),
+                                if (_routes.isEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: Colors.orange.shade300),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.info_outline, color: Colors.orange.shade800),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'No routes are configured. Please contact an administrator.',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 13,
+                                              color: Colors.orange.shade900,
+                                              height: 1.35,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _buildDropdown(
+                                              label: 'From',
+                                              hint: 'Select origin',
+                                              items: _origins.toList(),
+                                              value: _selectedOrigin,
+                                              onChanged: (value) {
+                                                setState(() => _selectedOrigin = value);
+                                              },
+                                              validator: (v) =>
+                                                  v == null || v.isEmpty ? 'Select origin' : null,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: _buildDropdown(
+                                              label: 'To',
+                                              hint: 'Select destination',
+                                              items: _destinations.toList(),
+                                              value: _selectedDestination,
+                                              onChanged: (value) {
+                                                setState(() => _selectedDestination = value);
+                                              },
+                                              validator: (v) =>
+                                                  v == null || v.isEmpty ? 'Select destination' : null,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      _buildTravelDateField(),
+                                    ],
+                                  ),
+                                const SizedBox(height: 22),
+                                _buildSectionTitle('Payment & notes'),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _amountController,
+                                  label: 'Amount (TZS)',
+                                  icon: Icons.payments_outlined,
+                                  keyboardType: TextInputType.number,
+                                  prefix: 'TZS ',
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please enter amount';
+                                    }
+                                    if (double.tryParse(value) == null) {
+                                      return 'Please enter valid amount';
+                                    }
+                                    if (double.parse(value) <= 0) {
+                                      return 'Amount must be greater than 0';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildTextField(
+                                  controller: _descriptionController,
+                                  label: 'Description (optional)',
+                                  icon: Icons.description_outlined,
+                                  maxLines: 3,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildWizardBottomBar(),
+              ],
             ),
     );
   }
-  
+
+  Widget _buildWizardBanner({required String title, required String subtitle}) {
+    return Material(
+      color: Colors.white,
+      elevation: 1,
+      shadowColor: Colors.black26,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: (_wizardStep + 1) / 3,
+                minHeight: 5,
+                backgroundColor: Colors.grey.shade200,
+                color: AppColors.redBar,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Step ${_wizardStep + 1} of 3',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.darkBlue,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade900,
+                height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                height: 1.35,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWizardCard({required IconData icon, required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.darkBlue.withValues(alpha: 0.07),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 28, color: AppColors.primaryBlue),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWizardBottomBar() {
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      shadowColor: Colors.black26,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          child: Row(
+            children: [
+              if (_wizardStep > 0) ...[
+                OutlinedButton(
+                  onPressed: _wizardBack,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.darkBlue,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text('Back', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: FilledButton(
+                  onPressed: _wizardNext,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        _wizardStep >= 2 ? AppColors.redBar : AppColors.darkBlue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    _wizardStep >= 2 ? 'Review & create' : 'Continue',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
+      style: GoogleFonts.poppins(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
         color: Colors.black87,
+        letterSpacing: 0.2,
       ),
     );
   }
@@ -628,10 +900,13 @@ class _NewParcelPageState extends State<NewParcelPage> {
   
   @override
   void dispose() {
+    _wizardPageController.dispose();
     _senderNameController.dispose();
     _senderPhoneController.dispose();
+    _senderEmailController.dispose();
     _receiverNameController.dispose();
     _receiverPhoneController.dispose();
+    _receiverEmailController.dispose();
     _amountController.dispose();
     _descriptionController.dispose();
     _parcelNameController.dispose();
@@ -649,8 +924,10 @@ class _ParcelCreateSnapshot {
     required this.creatorOffice,
     required this.senderName,
     required this.senderPhone,
+    this.senderEmail,
     required this.receiverName,
     required this.receiverPhone,
+    this.receiverEmail,
     required this.origin,
     required this.destination,
     required this.amount,
@@ -664,8 +941,10 @@ class _ParcelCreateSnapshot {
   final String creatorOffice;
   final String senderName;
   final String senderPhone;
+  final String? senderEmail;
   final String receiverName;
   final String receiverPhone;
+  final String? receiverEmail;
   final String origin;
   final String destination;
   final double amount;
@@ -691,11 +970,6 @@ class _ParcelCreateFlowPage extends StatefulWidget {
 }
 
 class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
-  int _step = 0;
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _submitting = false;
-
   String _formatSummaryTravelDate(String iso) {
     try {
       return DateFormat.yMMMEd().format(DateTime.parse(iso));
@@ -704,68 +978,34 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _createAfterPassword() async {
-    final password = _passwordController.text;
-    if (password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter your password to confirm.'),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _submitting = true);
-    final s = widget.snapshot;
-    try {
-      await ApiService.verifyPassword(password);
-      final created = await ApiService.createParcel(
-        parcelName: s.parcelName,
-        quantity: s.quantity,
-        weightBand: s.weightBand,
-        creatorOffice: s.creatorOffice,
-        senderName: s.senderName,
-        senderPhone: s.senderPhone,
-        receiverName: s.receiverName,
-        receiverPhone: s.receiverPhone,
-        origin: s.origin,
-        destination: s.destination,
-        amount: s.amount,
-        description: s.description,
-        travelDate: s.travelDate,
-      );
-      if (!mounted) return;
-      Map<String, dynamic> parcelOut;
-      final inner = created['parcel'];
-      if (inner is Map) {
-        parcelOut = Map<String, dynamic>.from(Map<dynamic, dynamic>.from(inner));
-      } else {
-        parcelOut = created;
-      }
-      Navigator.of(context).pop();
-      widget.onSuccess(parcelOut);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _submitting = false);
-      }
-    }
+  Future<void> _showVerifyPasswordSheet() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (modalContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(modalContext).bottom,
+          ),
+          child: _ParcelPasswordVerifySheet(
+            snapshot: widget.snapshot,
+            scaffoldMessenger: messenger,
+            onSuccess: (Map<String, dynamic> parcelOut) {
+              Navigator.of(modalContext).pop();
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
+              widget.onSuccess(parcelOut);
+            },
+          ),
+        );
+      },
+    );
   }
 
   Widget _summaryTile(IconData icon, String label, String value) {
@@ -915,7 +1155,7 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Almost done',
+                      'Almost there',
                       style: GoogleFonts.poppins(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
@@ -924,7 +1164,7 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "Review your shipment details. Next, you'll confirm with your password.",
+                      'Review the shipment details. Tap Continue, then enter your sign-in password in the sheet to create the parcel.',
                       style: GoogleFonts.poppins(
                         fontSize: 13,
                         height: 1.4,
@@ -956,11 +1196,27 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
           title: 'People',
           titleIcon: Icons.people_outline_rounded,
           children: [
-            _summaryTile(Icons.person_outline_rounded, 'Sender',
-                '${s.senderName}\n${s.senderPhone}'),
+            _summaryTile(
+              Icons.person_outline_rounded,
+              'Sender',
+              [
+                s.senderName,
+                s.senderPhone,
+                if (s.senderEmail != null && s.senderEmail!.trim().isNotEmpty)
+                  s.senderEmail!.trim(),
+              ].join('\n'),
+            ),
             _divider(),
-            _summaryTile(Icons.person_pin_outlined, 'Receiver',
-                '${s.receiverName}\n${s.receiverPhone}'),
+            _summaryTile(
+              Icons.person_pin_outlined,
+              'Receiver',
+              [
+                s.receiverName,
+                s.receiverPhone,
+                if (s.receiverEmail != null && s.receiverEmail!.trim().isNotEmpty)
+                  s.receiverEmail!.trim(),
+              ].join('\n'),
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -1080,9 +1336,9 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
             const SizedBox(width: 12),
             Expanded(
               flex: 2,
-              child: ElevatedButton(
-                onPressed: () => setState(() => _step = 1),
-                style: ElevatedButton.styleFrom(
+              child: FilledButton(
+                onPressed: _showVerifyPasswordSheet,
+                style: FilledButton.styleFrom(
                   backgroundColor: AppColors.darkBlue,
                   foregroundColor: Colors.white,
                   elevation: 0,
@@ -1107,205 +1363,254 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
     );
   }
 
-  Widget _buildPasswordStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-            border: Border.all(color: Colors.grey.shade100),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.lock_person_outlined, color: AppColors.redBar, size: 22),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Security check',
-                    style: GoogleFonts.poppins(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade900,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter the password you use to sign in to this app.',
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  height: 1.4,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                enabled: !_submitting,
-                autocorrect: false,
-                textInputAction: TextInputAction.done,
-                style: GoogleFonts.poppins(fontSize: 15),
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  labelStyle: GoogleFonts.poppins(),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  prefixIcon: Icon(Icons.key_rounded, color: Colors.grey.shade600),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                    ),
-                    onPressed: () {
-                      setState(() => _obscurePassword = !_obscurePassword);
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(
-                      color: AppColors.primaryBlue,
-                      width: 2,
-                    ),
-                  ),
-                ),
-                onFieldSubmitted: (_) {
-                  if (!_submitting) {
-                    _createAfterPassword();
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _submitting
-                    ? null
-                    : () => setState(() {
-                          _step = 0;
-                          _passwordController.clear();
-                        }),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey.shade800,
-                  side: BorderSide(color: Colors.grey.shade300),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  'Back',
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton(
-                onPressed: _submitting ? null : _createAfterPassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.redBar,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: _submitting
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        'Create parcel',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = widget.snapshot;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
+      backgroundColor: const Color(0xFFEEF1F7),
       appBar: AppBar(
         title: Text(
-          _step == 0 ? 'Parcel summary' : 'Confirm password',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          'Review details',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 17),
         ),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        leading: _step == 1
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: _submitting
-                    ? null
-                    : () {
-                        setState(() {
-                          _step = 0;
-                          _passwordController.clear();
-                        });
-                      },
-              )
-            : null,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Close',
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+          child: _buildSummaryStep(s),
+        ),
+      ),
+    );
+  }
+}
+
+/// Modal bottom sheet content: verify password and create parcel.
+class _ParcelPasswordVerifySheet extends StatefulWidget {
+  const _ParcelPasswordVerifySheet({
+    required this.snapshot,
+    required this.scaffoldMessenger,
+    required this.onSuccess,
+  });
+
+  final _ParcelCreateSnapshot snapshot;
+  final ScaffoldMessengerState scaffoldMessenger;
+  final void Function(Map<String, dynamic> parcel) onSuccess;
+
+  @override
+  State<_ParcelPasswordVerifySheet> createState() =>
+      _ParcelPasswordVerifySheetState();
+}
+
+class _ParcelPasswordVerifySheetState extends State<_ParcelPasswordVerifySheet> {
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final password = _passwordController.text;
+    if (password.isEmpty) {
+      widget.scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Enter your sign-in password.',
+            style: GoogleFonts.poppins(),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+    final s = widget.snapshot;
+    try {
+      await ApiService.verifyPassword(password);
+      final created = await ApiService.createParcel(
+        parcelName: s.parcelName,
+        quantity: s.quantity,
+        weightBand: s.weightBand,
+        creatorOffice: s.creatorOffice,
+        senderName: s.senderName,
+        senderPhone: s.senderPhone,
+        senderEmail: s.senderEmail,
+        receiverName: s.receiverName,
+        receiverPhone: s.receiverPhone,
+        receiverEmail: s.receiverEmail,
+        origin: s.origin,
+        destination: s.destination,
+        amount: s.amount,
+        description: s.description,
+        travelDate: s.travelDate,
+      );
+      if (!mounted) return;
+      Map<String, dynamic> parcelOut;
+      final inner = created['parcel'];
+      if (inner is Map) {
+        parcelOut = Map<String, dynamic>.from(Map<dynamic, dynamic>.from(inner));
+      } else {
+        parcelOut = created;
+      }
+      widget.onSuccess(parcelOut);
+    } catch (e) {
+      if (!mounted) return;
+      widget.scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Verify password',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Enter the same password you use to sign in. It is checked on the Tilisho server (your staff account / database).',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              height: 1.4,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            enabled: !_submitting,
+            autocorrect: false,
+            textInputAction: TextInputAction.done,
+            style: GoogleFonts.poppins(fontSize: 15),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              labelStyle: GoogleFonts.poppins(),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              prefixIcon: Icon(Icons.key_rounded, color: Colors.grey.shade600),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+                onPressed: _submitting
+                    ? null
+                    : () => setState(() => _obscurePassword = !_obscurePassword),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: AppColors.primaryBlue,
+                  width: 2,
+                ),
+              ),
+            ),
+            onSubmitted: (_) {
+              if (!_submitting) {
+                _submit();
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          Row(
             children: [
-              if (_step == 0)
-                _buildSummaryStep(s)
-              else
-                _buildPasswordStep(),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed:
+                      _submitting ? null : () => Navigator.of(context).pop(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.darkBlue,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.redBar,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: _submitting
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          'Create parcel',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                ),
+              ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }

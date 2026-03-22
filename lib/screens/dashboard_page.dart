@@ -52,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
             // This is an admin account - should not have access
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Hii ni dashboard ya Staff tu. Tafadhali ingia kama staff.'),
+                content: Text('This dashboard is for staff only. Please sign in with a staff account.'),
                 backgroundColor: Colors.red,
                 behavior: SnackBarBehavior.floating,
                 duration: Duration(seconds: 3),
@@ -80,7 +80,7 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (e) {
       if (mounted) {
         final message = e.toString().replaceFirst('Exception: ', '');
-        if (message.contains('Session imeisha') || message.contains('ingia tena')) {
+        if (message.contains('Session expired') || message.contains('sign in again')) {
           // Token expired, go back to login
           Navigator.pushReplacementNamed(context, '/login');
           return;
