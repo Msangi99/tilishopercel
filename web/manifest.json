@@ -1,11 +1,11 @@
 {
-    "name": "t_percel",
-    "short_name": "t_percel",
+    "name": "Tilisho Parcel",
+    "short_name": "Tilisho Parcel",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Tilisho Parcel mobile app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

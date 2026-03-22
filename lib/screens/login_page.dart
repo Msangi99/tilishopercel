@@ -74,7 +74,7 @@ class _LoginPageState extends State<LoginPage> {
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: AssetImage('asset/desc_bg_bus.webp'),
+                image: AssetImage('asset/front.jpeg'),
                 fit: BoxFit.cover,
               ),
             ),
@@ -127,12 +127,13 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'LUXURY COACH • ELITE CLASS',
+                      'TILISHO SAFARIS. DAR - ARUSHA DAR - ROMBO',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
                         color: accentColor,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 2.5,
+                        letterSpacing: 1.2,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -296,7 +297,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                     // Footer
                     const Text(
-                      '© 2026 TILISHO LUXURY COACH. DAR - ARUSHA - NAIROBI.',
+                      '© 2026 TILISHO SAFARIS. DAR - ARUSHA DAR - ROMBO.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white30,

@@ -424,6 +424,7 @@ class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProvider
 
   Widget _buildParcelCard(Map<String, dynamic> parcel, {VoidCallback? onTap}) {
     final tracking = parcel['tracking_number']?.toString() ?? '—';
+    final parcelName = parcel['parcel_name']?.toString();
     final sender = parcel['sender_name']?.toString() ?? '—';
     final receiver = parcel['receiver_name']?.toString() ?? '—';
     final origin = parcel['origin']?.toString() ?? '—';
@@ -478,6 +479,17 @@ class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProvider
                 ),
               ],
             ),
+            if (parcelName != null && parcelName.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                parcelName,
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Text('$sender → $receiver', style: TextStyle(color: Colors.grey.shade700, fontSize: 14)),
             const SizedBox(height: 4),

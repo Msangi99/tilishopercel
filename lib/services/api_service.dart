@@ -173,6 +173,31 @@ class ApiService {
     throw Exception(err['message'] ?? 'Imeshindikana kusasisha wasifu');
   }
 
+  /// Verify the current user's password (Sanctum session).
+  static Future<void> verifyPassword(String password) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/user/verify-password'),
+      headers: headers,
+      body: jsonEncode({'password': password}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['status'] == 'success') {
+        return;
+      }
+    }
+
+    if (response.statusCode == 401) {
+      await _clearAuth();
+      throw Exception('Session imeisha, tafadhali ingia tena');
+    }
+
+    final err = jsonDecode(response.body);
+    throw Exception(err['message'] ?? 'Password si sahihi');
+  }
+
   /// Check if current user is staff
   static Future<bool> isStaff() async {
     try {
@@ -247,6 +272,10 @@ class ApiService {
 
   /// Create a new parcel
   static Future<Map<String, dynamic>> createParcel({
+    required String parcelName,
+    required int quantity,
+    required String weightBand,
+    required String creatorOffice,
     required String senderName,
     required String senderPhone,
     required String receiverName,
@@ -262,6 +291,10 @@ class ApiService {
       Uri.parse('$baseUrl/api/parcels'),
       headers: headers,
       body: jsonEncode({
+        'parcel_name': parcelName,
+        'quantity': quantity,
+        'weight_band': weightBand,
+        'creator_office': creatorOffice,
         'sender_name': senderName,
         'sender_phone': senderPhone,
         'receiver_name': receiverName,
@@ -270,14 +303,20 @@ class ApiService {
         'destination': destination,
         'amount': amount,
         'description': description,
-        if (travelDate != null) 'travel_date': travelDate,
+        'travel_date': travelDate,
       }),
     );
 
     if (response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      if (data['status'] == 'success') {
-        return data['data'];
+      final data = _decodeJsonObject(response.body);
+      if (data != null && data['status'] == 'success') {
+        final payload = data['data'];
+        if (payload is Map<String, dynamic>) {
+          return payload;
+        }
+        if (payload is Map) {
+          return Map<String, dynamic>.from(payload);
+        }
       }
     }
 
@@ -286,8 +325,11 @@ class ApiService {
       throw Exception('Session imeisha, tafadhali ingia tena');
     }
 
-    final errorData = jsonDecode(response.body);
-    throw Exception(errorData['message'] ?? 'Imeshindikana kuunda parcel');
+    final err = _decodeJsonObject(response.body);
+    final msg = err?['message']?.toString() ??
+        err?['error']?.toString() ??
+        'Imeshindikana kuunda parcel (${response.statusCode})';
+    throw Exception(msg);
   }
 
   /// Scan parcel using tracking number
@@ -481,6 +523,17 @@ class ApiService {
     } catch (_) {
       return null;
     }
+  }
+
+  static Map<String, dynamic>? _decodeJsonObject(String body) {
+    final decoded = _parseJson(body);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      return Map<String, dynamic>.from(decoded);
+    }
+    return null;
   }
 
   /// Get dashboard statistics.

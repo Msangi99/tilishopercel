@@ -169,6 +169,18 @@ class PrinterService {
       'Receiver: ${_str(parcel['receiver_name'])} ${_str(parcel['receiver_phone'] ?? parcel['receiver_contact'])}',
     );
     await SunmiPrinter.printText('Ship Date: ${_str(parcel['travel_date'])}');
+    final pn = parcel['parcel_name']?.toString();
+    if (pn != null && pn.trim().isNotEmpty) {
+      await SunmiPrinter.printText('Parcel: $pn');
+    }
+    final q = parcel['quantity'];
+    if (q != null) {
+      await SunmiPrinter.printText('Qty: $q  Weight: ${_weightBand(parcel['weight_band'])}');
+    }
+    final off = parcel['creator_office']?.toString();
+    if (off != null && off.trim().isNotEmpty) {
+      await SunmiPrinter.printText('Office: $off');
+    }
     final desc = parcel['description']?.toString();
     if (desc != null && desc.trim().isNotEmpty) {
       await SunmiPrinter.printText('Cargo: $desc');
@@ -221,6 +233,20 @@ class PrinterService {
       ),
       PrintItem.text('Ship Date: ${_str(parcel['travel_date'])}'),
     ];
+    final pn = parcel['parcel_name']?.toString();
+    if (pn != null && pn.trim().isNotEmpty) {
+      items.add(PrintItem.text('Parcel: $pn'));
+    }
+    final q = parcel['quantity'];
+    if (q != null) {
+      items.add(
+        PrintItem.text('Qty: $q  Weight: ${_weightBand(parcel['weight_band'])}'),
+      );
+    }
+    final off = parcel['creator_office']?.toString();
+    if (off != null && off.trim().isNotEmpty) {
+      items.add(PrintItem.text('Office: $off'));
+    }
     final desc = parcel['description']?.toString();
     if (desc != null && desc.trim().isNotEmpty) {
       items.add(PrintItem.text('Cargo: $desc'));
@@ -242,6 +268,13 @@ class PrinterService {
   }
 
   static String _str(dynamic v) => v?.toString() ?? '—';
+
+  static String _weightBand(dynamic v) {
+    final s = v?.toString() ?? '';
+    if (s == 'over_20kg') return '20kg+';
+    if (s == 'under_20kg') return '<20kg';
+    return '—';
+  }
   static double _amount(dynamic v) {
     if (v is num) return v.toDouble();
     return double.tryParse(v?.toString() ?? '') ?? 0;

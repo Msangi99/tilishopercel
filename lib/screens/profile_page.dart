@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:t_percel/main.dart';
 import 'package:t_percel/services/api_service.dart';
 
@@ -22,6 +23,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _error;
+  String? _memberSinceLabel;
 
   @override
   void initState() {
@@ -38,11 +40,21 @@ class _ProfilePageState extends State<ProfilePage> {
       final data = await ApiService.getUser();
       final user = data['user'] as Map<String, dynamic>?;
       if (user != null && mounted) {
+        String? memberSince;
+        final createdRaw = user['created_at']?.toString();
+        if (createdRaw != null && createdRaw.isNotEmpty) {
+          try {
+            memberSince = DateFormat.yMMMd().format(DateTime.parse(createdRaw));
+          } catch (_) {
+            memberSince = createdRaw;
+          }
+        }
         setState(() {
           _nameController.text = user['name']?.toString() ?? '';
           _emailController.text = user['email']?.toString() ?? '';
           _phoneController.text = user['phone']?.toString() ?? '';
           _usernameController.text = user['username']?.toString() ?? '';
+          _memberSinceLabel = memberSince;
           _isLoading = false;
         });
       }
@@ -163,6 +175,40 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 20),
+                        if (_memberSinceLabel != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Member since',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _memberSinceLabel!,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         _buildField(
                           controller: _nameController,
                           label: 'Name',

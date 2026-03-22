@@ -26,6 +26,13 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
     return double.tryParse(v?.toString() ?? '') ?? 0;
   }
 
+  static String _weightBandLabel(dynamic v) {
+    final s = v?.toString() ?? '';
+    if (s == 'over_20kg') return '20 kg or more';
+    if (s == 'under_20kg') return 'Less than 20 kg';
+    return '—';
+  }
+
   static String _formatDateTime(dynamic v) {
     if (v == null) return '—';
     final raw = v.toString();
@@ -121,6 +128,16 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
     final destination = _str(parcel['destination']);
     final amount = _amount(parcel['amount']);
     final description = parcel['description']?.toString();
+    String nz(dynamic v) {
+      final s = v?.toString().trim() ?? '';
+      return s.isEmpty ? '—' : s;
+    }
+
+    final parcelName = nz(parcel['parcel_name']);
+    final quantityRaw = parcel['quantity'];
+    final quantityStr = quantityRaw == null ? '—' : quantityRaw.toString();
+    final weightLabel = _weightBandLabel(parcel['weight_band']);
+    final creatorOffice = nz(parcel['creator_office']);
     final travelDate = _str(parcel['travel_date']);
     final transportedBus = parcel['transported_bus'] is Map
         ? parcel['transported_bus'] as Map<String, dynamic>
@@ -250,6 +267,22 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
                   ),
                   _receiptDivider(),
                   const SizedBox(height: 12),
+
+                  if (parcelName != '—' ||
+                      quantityStr != '—' ||
+                      weightLabel != '—' ||
+                      creatorOffice != '—') ...[
+                    if (parcelName != '—')
+                      _receiptKeyValue('PARCEL NAME', parcelName),
+                    if (quantityStr != '—')
+                      _receiptKeyValue('QUANTITY', quantityStr),
+                    if (weightLabel != '—')
+                      _receiptKeyValue('WEIGHT', weightLabel),
+                    if (creatorOffice != '—')
+                      _receiptKeyValue('CREATOR OFFICE', creatorOffice),
+                    _receiptDivider(),
+                    const SizedBox(height: 8),
+                  ],
 
                   // Sender
                   _receiptKeyValue('SENDER', senderName),
