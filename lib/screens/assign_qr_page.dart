@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:t_percel/main.dart';
 import 'package:t_percel/screens/parcel_detail_page.dart';
 import 'package:t_percel/services/api_service.dart';
+import 'package:t_percel/widgets/password_verify_sheet.dart';
 
 class AssignQrPage extends StatefulWidget {
   const AssignQrPage({super.key});
@@ -579,30 +580,49 @@ class _AssignTransporterReceiverViewState
         return;
       }
     }
-    setState(() => _isSaving = true);
-    try {
-      final data = await ApiService.assignReceiver(widget.trackingNumber);
-      final parcel = data['parcel'] as Map<String, dynamic>?;
-      if (!mounted) return;
-      if (parcel == null) {
-        throw Exception('No parcel found for this QR code');
-      }
 
-      // Go to a success screen with animation and Back Home
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ParcelReceivedSuccessPage(parcel: parcel),
+    setState(() => _isSaving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red.shade800,
-          behavior: SnackBarBehavior.floating,
-        ),
+        builder: (modalContext) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(modalContext).bottom,
+            ),
+            child: PasswordVerifySheet(
+              title: 'Verify password',
+              subtitle:
+                  'Enter your sign-in password to confirm you are receiving this parcel. It is checked on the Tilisho server.',
+              primaryButtonLabel: 'Confirm receipt',
+              scaffoldMessenger: messenger,
+              onVerified: () async {
+                final data =
+                    await ApiService.assignReceiver(widget.trackingNumber);
+                final parcel = data['parcel'] as Map<String, dynamic>?;
+                if (!modalContext.mounted) return;
+                if (parcel == null) {
+                  throw Exception('No parcel found for this QR code');
+                }
+                Navigator.of(modalContext).pop();
+                if (!mounted) return;
+                await Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ParcelReceivedSuccessPage(parcel: parcel),
+                  ),
+                );
+              },
+            ),
+          );
+        },
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
