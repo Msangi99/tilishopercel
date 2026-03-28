@@ -797,46 +797,36 @@ class _NewParcelPageState extends State<NewParcelPage> {
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: _buildSearchableLocationField(
-                                              label: 'From',
-                                              icon: Icons.place_outlined,
-                                              options: _routePlaceOptions,
-                                              value: _selectedOrigin,
-                                              pickerTitle: 'Select origin',
-                                              onChanged: (value) {
-                                                setState(
-                                                    () => _selectedOrigin = value);
-                                              },
-                                              validator: (v) =>
-                                                  v == null || v.isEmpty
-                                                      ? 'Select origin'
-                                                      : null,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: _buildSearchableLocationField(
-                                              label: 'To',
-                                              icon: Icons.flag_rounded,
-                                              options: _routePlaceOptions,
-                                              value: _selectedDestination,
-                                              pickerTitle: 'Select destination',
-                                              onChanged: (value) {
-                                                setState(() =>
-                                                    _selectedDestination = value);
-                                              },
-                                              validator: (v) =>
-                                                  v == null || v.isEmpty
-                                                      ? 'Select destination'
-                                                      : null,
-                                            ),
-                                          ),
-                                        ],
+                                      _buildSearchableLocationField(
+                                        label: 'From',
+                                        icon: Icons.place_outlined,
+                                        options: _routePlaceOptions,
+                                        value: _selectedOrigin,
+                                        pickerTitle: 'Select origin',
+                                        onChanged: (value) {
+                                          setState(
+                                              () => _selectedOrigin = value);
+                                        },
+                                        validator: (v) =>
+                                            v == null || v.isEmpty
+                                                ? 'Select origin'
+                                                : null,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _buildSearchableLocationField(
+                                        label: 'To',
+                                        icon: Icons.flag_rounded,
+                                        options: _routePlaceOptions,
+                                        value: _selectedDestination,
+                                        pickerTitle: 'Select destination',
+                                        onChanged: (value) {
+                                          setState(() =>
+                                              _selectedDestination = value);
+                                        },
+                                        validator: (v) =>
+                                            v == null || v.isEmpty
+                                                ? 'Select destination'
+                                                : null,
                                       ),
                                       const SizedBox(height: 16),
                                       _buildTravelDateField(),
