@@ -59,6 +59,8 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _pullRefresh() async {}
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
@@ -118,9 +120,13 @@ class _LoginPageState extends State<LoginPage> {
               bottom: true,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    padding: EdgeInsets.only(bottom: 20 + bottomInset),
-                    child: ConstrainedBox(
+                  return RefreshIndicator(
+                    color: AppColors.redBar,
+                    onRefresh: _pullRefresh,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.only(bottom: 20 + bottomInset),
+                      child: ConstrainedBox(
                       constraints: BoxConstraints(minHeight: constraints.maxHeight),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,7 +420,8 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                 ),
-              );
+              ),
+            );
                 },
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:t_percel/services/printer_service.dart';
+import 'package:t_percel/services/api_service.dart';
 import 'package:t_percel/main.dart';
 
 class ParcelDetailPage extends StatefulWidget {
@@ -19,6 +20,43 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
   PrinterSelection _selection = const PrinterSelection(type: PrinterType.none);
   bool _loadingPrinter = true;
   bool _printBusy = false;
+  bool _refetchingParcel = false;
+  late Map<String, dynamic> _parcel;
+
+  @override
+  void initState() {
+    super.initState();
+    _parcel = Map<String, dynamic>.from(widget.parcel);
+    _initPrinter();
+  }
+
+  Future<void> _refreshParcel() async {
+    final tracking = _parcel['tracking_number']?.toString().trim();
+    if (tracking == null || tracking.isEmpty) return;
+    setState(() => _refetchingParcel = true);
+    try {
+      final data = await ApiService.viewParcel(tracking);
+      final p = data['parcel'] as Map<String, dynamic>?;
+      if (!mounted) return;
+      if (p != null) {
+        setState(() => _parcel = Map<String, dynamic>.from(p));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+            style: GoogleFonts.poppins(fontSize: 13, height: 1.35),
+          ),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _refetchingParcel = false);
+    }
+  }
 
   static String _str(dynamic v) => v?.toString() ?? '—';
 
@@ -44,12 +82,6 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
     } catch (_) {
       return raw;
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _initPrinter();
   }
 
   Future<void> _initPrinter() async {
@@ -152,7 +184,7 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
     try {
       await _printerService.printReceipt(
         selection: _selection,
-        parcel: widget.parcel,
+        parcel: _parcel,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -180,7 +212,7 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
     if (_printBusy || _loadingPrinter) return;
     setState(() => _printBusy = true);
     try {
-      final usedShare = await _printerService.printReceiptAsPdf(widget.parcel);
+      final usedShare = await _printerService.printReceiptAsPdf(_parcel);
       if (!mounted) return;
       if (usedShare) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -205,7 +237,7 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final parcel = widget.parcel;
+    final parcel = _parcel;
     String nz(dynamic v) {
       final s = v?.toString().trim() ?? '';
       return s.isEmpty ? '—' : s;
@@ -270,6 +302,26 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
         actions: [
+          if (_refetchingParcel)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 22),
+              tooltip: 'Refresh',
+              onPressed: _refreshParcel,
+            ),
           if (_loadingPrinter)
             const Padding(
               padding: EdgeInsets.only(right: 14),
@@ -353,10 +405,14 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
           ],
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-        child: Center(
-          child: ConstrainedBox(
+      body: RefreshIndicator(
+        color: AppColors.redBar,
+        onRefresh: _refreshParcel,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Center(
+            child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
             child: Material(
               elevation: 6,
@@ -706,6 +762,7 @@ class _ParcelDetailPageState extends State<ParcelDetailPage> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

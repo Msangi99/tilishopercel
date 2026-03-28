@@ -53,6 +53,11 @@ class _DebugApiPageState extends State<DebugApiPage> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await _testBuses();
+    await _testRoutes();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,12 +65,27 @@ class _DebugApiPageState extends State<DebugApiPage> {
         title: const Text('API Debug'),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _isLoading ? null : _refreshAll,
+          ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: Colors.blue.shade800,
+            onRefresh: _refreshAll,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
-              child: Column(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(
                 children: [
                   // Test Buses Button
                   ElevatedButton.icon(
@@ -148,8 +168,12 @@ class _DebugApiPageState extends State<DebugApiPage> {
                       ),
                     ),
                 ],
+                    ),
               ),
             ),
+          );
+        },
+      ),
     );
   }
 }

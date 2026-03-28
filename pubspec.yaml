@@ -45,6 +45,7 @@ dependencies:
   blue_thermal_printer_plus: ^0.0.19
   pdf: ^3.12.0
   printing: ^5.14.3
+  connectivity_plus: ^6.1.1
 
 dev_dependencies:
   flutter_test:

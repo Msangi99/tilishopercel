@@ -46,6 +46,12 @@ class _AssignQrPageState extends State<AssignQrPage> {
     _controller.start();
   }
 
+  Future<void> _refreshScanner() async {
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+    await _controller.start();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -58,9 +64,25 @@ class _AssignQrPageState extends State<AssignQrPage> {
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _refreshScanner,
+          ),
+        ],
       ),
-      body: Column(
-        children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: AppColors.redBar,
+            onRefresh: _refreshScanner,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: constraints.maxHeight,
+                child: Column(
+                  children: [
           Expanded(
             flex: 3,
             child: Stack(
@@ -217,7 +239,12 @@ class _AssignQrPageState extends State<AssignQrPage> {
               ),
             ),
           ),
-        ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -233,10 +260,29 @@ class AssignOptionsPage extends StatefulWidget {
 }
 
 class _AssignOptionsPageState extends State<AssignOptionsPage> {
+  late Future<Map<String, dynamic>?> _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = ApiService.getSavedUser();
+  }
+
+  void _reloadProfile() {
+    setState(() {
+      _profileFuture = ApiService.getSavedUser();
+    });
+  }
+
+  Future<void> _refreshProfile() async {
+    _reloadProfile();
+    await _profileFuture;
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>?>(
-      future: ApiService.getSavedUser(),
+      future: _profileFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Scaffold(
@@ -249,22 +295,43 @@ class _AssignOptionsPageState extends State<AssignOptionsPage> {
               backgroundColor: AppColors.redBar,
               foregroundColor: Colors.white,
               elevation: 0,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: _reloadProfile,
+                ),
+              ],
             ),
-            body: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading your profile…',
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                return RefreshIndicator(
+                  color: AppColors.redBar,
+                  onRefresh: _refreshProfile,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Loading your profile…',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           );
         }
@@ -648,15 +715,26 @@ class _AssignTransporterReceiverViewState
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _loadInitialData,
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Center(
-                child: ConstrainedBox(
+            child: RefreshIndicator(
+              color: AppColors.redBar,
+              onRefresh: _loadInitialData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Center(
+                  child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: Material(
                     elevation: 6,
@@ -756,6 +834,7 @@ class _AssignTransporterReceiverViewState
                 ),
               ),
             ),
+          ),
           ),
           if (_loadingWorkers || _loadingParcel)
             const Padding(
@@ -1247,10 +1326,13 @@ class ParcelReceivedSuccessPage extends StatefulWidget {
 class _ParcelReceivedSuccessPageState extends State<ParcelReceivedSuccessPage>
     with SingleTickerProviderStateMixin {
   bool _animate = false;
+  bool _refetching = false;
+  late Map<String, dynamic> _parcel;
 
   @override
   void initState() {
     super.initState();
+    _parcel = Map<String, dynamic>.from(widget.parcel);
     // Trigger animation after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -1261,15 +1343,73 @@ class _ParcelReceivedSuccessPageState extends State<ParcelReceivedSuccessPage>
     });
   }
 
+  Future<void> _refreshParcel() async {
+    final tracking = _parcel['tracking_number']?.toString().trim();
+    if (tracking == null || tracking.isEmpty) return;
+    setState(() => _refetching = true);
+    try {
+      final data = await ApiService.viewParcel(tracking);
+      final p = data['parcel'] as Map<String, dynamic>?;
+      if (mounted && p != null) {
+        setState(() => _parcel = Map<String, dynamic>.from(p));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _refetching = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tracking = widget.parcel['tracking_number']?.toString() ?? '—';
+    final tracking = _parcel['tracking_number']?.toString() ?? '—';
 
     return Scaffold(
       backgroundColor: const Color(0xFFE4E9F2),
+      appBar: AppBar(
+        backgroundColor: AppColors.redBar,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(
+          'Parcel received',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 17),
+        ),
+        actions: [
+          if (_refetching)
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+              onPressed: _refreshParcel,
+            ),
+        ],
+      ),
       body: SafeArea(
-        child: Center(
+        child: RefreshIndicator(
+          color: AppColors.redBar,
+          onRefresh: _refreshParcel,
           child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),

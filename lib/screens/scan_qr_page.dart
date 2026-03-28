@@ -62,6 +62,12 @@ class _ScanQrPageState extends State<ScanQrPage> {
     }
   }
 
+  Future<void> _refreshScanner() async {
+    if (!mounted) return;
+    setState(() => _isProcessing = false);
+    await _controller.start();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,9 +75,25 @@ class _ScanQrPageState extends State<ScanQrPage> {
         title: Text('Scan Parcel QR', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _refreshScanner,
+          ),
+        ],
       ),
-      body: Column(
-        children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: AppColors.redBar,
+            onRefresh: _refreshScanner,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: constraints.maxHeight,
+                child: Column(
+                  children: [
           Expanded(
             flex: 3,
             child: Stack(
@@ -138,7 +160,12 @@ class _ScanQrPageState extends State<ScanQrPage> {
               ),
             ),
           ),
-        ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

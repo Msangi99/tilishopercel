@@ -4,13 +4,28 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:t_percel/main.dart';
 import 'package:t_percel/screens/my_parcels_page.dart';
+import 'package:t_percel/services/api_service.dart';
 import 'package:t_percel/services/printer_service.dart';
 
 /// Shown after a parcel is created successfully (customer-style receipt).
-class ParcelReceiptPage extends StatelessWidget {
+class ParcelReceiptPage extends StatefulWidget {
   const ParcelReceiptPage({super.key, required this.parcel});
 
   final Map<String, dynamic> parcel;
+
+  @override
+  State<ParcelReceiptPage> createState() => _ParcelReceiptPageState();
+}
+
+class _ParcelReceiptPageState extends State<ParcelReceiptPage> {
+  late Map<String, dynamic> _parcel;
+  bool _refetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _parcel = Map<String, dynamic>.from(widget.parcel);
+  }
 
   String _str(dynamic v) => v?.toString() ?? '—';
 
@@ -23,6 +38,30 @@ class ParcelReceiptPage extends StatelessWidget {
     if (v == null) return 0;
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString()) ?? 0;
+  }
+
+  Future<void> _refreshFromServer() async {
+    final tracking = _parcel['tracking_number']?.toString().trim();
+    if (tracking == null || tracking.isEmpty) return;
+    setState(() => _refetching = true);
+    try {
+      final data = await ApiService.viewParcel(tracking);
+      final p = data['parcel'] as Map<String, dynamic>?;
+      if (mounted && p != null) {
+        setState(() => _parcel = Map<String, dynamic>.from(p));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _refetching = false);
+    }
   }
 
   static TextStyle _labelStyle(BuildContext context) => GoogleFonts.poppins(
@@ -41,12 +80,12 @@ class ParcelReceiptPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tracking = _str(parcel['tracking_number']);
-    final amountFmt = NumberFormat('#,###', 'en_US').format(_amount(parcel['amount']).round());
-    String travel = _str(parcel['travel_date']);
+    final tracking = _str(_parcel['tracking_number']);
+    final amountFmt = NumberFormat('#,###', 'en_US').format(_amount(_parcel['amount']).round());
+    String travel = _str(_parcel['travel_date']);
     try {
-      if (parcel['travel_date'] != null) {
-        travel = DateFormat.yMMMEd().format(DateTime.parse(parcel['travel_date'].toString()));
+      if (_parcel['travel_date'] != null) {
+        travel = DateFormat.yMMMEd().format(DateTime.parse(_parcel['travel_date'].toString()));
       }
     } catch (_) {}
 
@@ -59,18 +98,39 @@ class ParcelReceiptPage extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
         actions: [
+          if (_refetching)
+            const Padding(
+              padding: EdgeInsets.only(right: 4),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh, size: 22),
+              onPressed: _refreshFromServer,
+            ),
           IconButton(
             tooltip: 'Print or save as PDF',
             icon: const Icon(Icons.picture_as_pdf_outlined, size: 22),
-            onPressed: () => _openParcelReceiptPdf(context, parcel),
+            onPressed: () => _openParcelReceiptPdf(context, _parcel),
           ),
           const SizedBox(width: 4),
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
-          child: Column(
+        child: RefreshIndicator(
+          color: AppColors.redBar,
+          onRefresh: _refreshFromServer,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Material(
@@ -199,13 +259,13 @@ class ParcelReceiptPage extends StatelessWidget {
                           _ReceiptSectionTitle('Shipment'),
                           _ReceiptKvRow(
                             label: 'Parcel',
-                            value: _str(parcel['parcel_name']),
+                            value: _str(_parcel['parcel_name']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
                           _ReceiptKvRow(
                             label: 'Quantity',
-                            value: _str(parcel['quantity']),
+                            value: _str(_parcel['quantity']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
@@ -219,13 +279,13 @@ class ParcelReceiptPage extends StatelessWidget {
                           _ReceiptSectionTitle('Route'),
                           _ReceiptKvRow(
                             label: 'From',
-                            value: _str(parcel['origin']),
+                            value: _str(_parcel['origin']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
                           _ReceiptKvRow(
                             label: 'To',
-                            value: _str(parcel['destination']),
+                            value: _str(_parcel['destination']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
@@ -233,97 +293,97 @@ class ParcelReceiptPage extends StatelessWidget {
                           _ReceiptSectionTitle('Parties'),
                           _ReceiptKvRow(
                             label: 'Sender',
-                            value: _str(parcel['sender_name']),
+                            value: _str(_parcel['sender_name']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
                           _ReceiptKvRow(
                             label: 'Sender phone',
-                            value: _str(parcel['sender_phone']),
+                            value: _str(_parcel['sender_phone']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
-                          if (parcel['sender_email'] != null &&
-                              parcel['sender_email'].toString().trim().isNotEmpty)
+                          if (_parcel['sender_email'] != null &&
+                              _parcel['sender_email'].toString().trim().isNotEmpty)
                             _ReceiptKvRow(
                               label: 'Sender email',
-                              value: _str(parcel['sender_email']),
+                              value: _str(_parcel['sender_email']),
                               labelStyle: _labelStyle(context),
                               valueStyle: _valueStyle(context),
                             ),
                           _ReceiptKvRow(
                             label: 'Receiver',
-                            value: _str(parcel['receiver_name']),
+                            value: _str(_parcel['receiver_name']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
                           _ReceiptKvRow(
                             label: 'Receiver phone',
-                            value: _str(parcel['receiver_phone']),
+                            value: _str(_parcel['receiver_phone']),
                             labelStyle: _labelStyle(context),
                             valueStyle: _valueStyle(context),
                           ),
-                          if (parcel['receiver_email'] != null &&
-                              parcel['receiver_email'].toString().trim().isNotEmpty)
+                          if (_parcel['receiver_email'] != null &&
+                              _parcel['receiver_email'].toString().trim().isNotEmpty)
                             _ReceiptKvRow(
                               label: 'Receiver email',
-                              value: _str(parcel['receiver_email']),
+                              value: _str(_parcel['receiver_email']),
                               labelStyle: _labelStyle(context),
                               valueStyle: _valueStyle(context),
                             ),
-                          if (parcel['transported_at'] != null ||
-                              parcel['received_at'] != null) ...[
+                          if (_parcel['transported_at'] != null ||
+                              _parcel['received_at'] != null) ...[
                             const SizedBox(height: 14),
                             _ReceiptSectionTitle('Handover'),
-                            if (parcel['transported_at'] != null) ...[
+                            if (_parcel['transported_at'] != null) ...[
                               _ReceiptKvRow(
                                 label: 'Given to',
-                                value: _str(parcel['transported_by_name']),
+                                value: _str(_parcel['transported_by_name']),
                                 labelStyle: _labelStyle(context),
                                 valueStyle: _valueStyle(context),
                               ),
-                              if (_nz(parcel['transported_by_phone']) != '—')
+                              if (_nz(_parcel['transported_by_phone']) != '—')
                                 _ReceiptKvRow(
                                   label: 'Transporter phone',
-                                  value: _nz(parcel['transported_by_phone']),
+                                  value: _nz(_parcel['transported_by_phone']),
                                   labelStyle: _labelStyle(context),
                                   valueStyle: _valueStyle(context),
                                 ),
                               _ReceiptKvRow(
                                 label: 'Handed over at',
-                                value: _str(parcel['transported_at']),
+                                value: _str(_parcel['transported_at']),
                                 labelStyle: _labelStyle(context),
                                 valueStyle: _valueStyle(context),
                               ),
                             ],
-                            if (parcel['received_at'] != null) ...[
+                            if (_parcel['received_at'] != null) ...[
                               _ReceiptKvRow(
                                 label: 'Received by (staff)',
-                                value: _str(parcel['received_by_name']),
+                                value: _str(_parcel['received_by_name']),
                                 labelStyle: _labelStyle(context),
                                 valueStyle: _valueStyle(context),
                               ),
-                              if (_nz(parcel['received_by_phone']) != '—')
+                              if (_nz(_parcel['received_by_phone']) != '—')
                                 _ReceiptKvRow(
                                   label: 'Staff receiver phone',
-                                  value: _nz(parcel['received_by_phone']),
+                                  value: _nz(_parcel['received_by_phone']),
                                   labelStyle: _labelStyle(context),
                                   valueStyle: _valueStyle(context),
                                 ),
                               _ReceiptKvRow(
                                 label: 'Received at',
-                                value: _str(parcel['received_at']),
+                                value: _str(_parcel['received_at']),
                                 labelStyle: _labelStyle(context),
                                 valueStyle: _valueStyle(context),
                               ),
                             ],
                           ],
-                          if (parcel['description'] != null &&
-                              parcel['description'].toString().isNotEmpty) ...[
+                          if (_parcel['description'] != null &&
+                              _parcel['description'].toString().isNotEmpty) ...[
                             const SizedBox(height: 14),
                             _ReceiptSectionTitle('Notes'),
                             Text(
-                              _str(parcel['description']),
+                              _str(_parcel['description']),
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
                                 height: 1.45,
@@ -501,6 +561,7 @@ class ParcelReceiptPage extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

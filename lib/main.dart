@@ -10,6 +10,7 @@ import 'package:t_percel/screens/scan_qr_page.dart';
 import 'package:t_percel/screens/assign_qr_page.dart';
 import 'package:t_percel/screens/search_parcel_page.dart';
 import 'package:t_percel/services/api_service.dart';
+import 'package:t_percel/widgets/network_banner_host.dart';
 
 void main() {
   HttpOverrides.global = MyHttpOverrides();
@@ -40,6 +41,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Tilisho Parcel',
+      builder: (context, child) {
+        return NetworkBannerHost(child: child ?? const SizedBox.shrink());
+      },
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

@@ -15,6 +15,21 @@ class _SearchParcelPageState extends State<SearchParcelPage> {
   final TextEditingController _controller = TextEditingController();
   bool _isLoading = false;
 
+  Future<void> _refresh() async {
+    final tracking = _controller.text.trim();
+    if (tracking.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a tracking number to search'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    await _search();
+  }
+
   Future<void> _search() async {
     final tracking = _controller.text.trim();
     if (tracking.isEmpty || _isLoading) return;
@@ -53,12 +68,28 @@ class _SearchParcelPageState extends State<SearchParcelPage> {
         title: Text('Search Parcel', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _isLoading ? null : _refresh,
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: AppColors.redBar,
+            onRefresh: _refresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
             Text(
               'Search by tracking number',
               style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
@@ -86,8 +117,13 @@ class _SearchParcelPageState extends State<SearchParcelPage> {
                     )
                   : const Text('Search'),
             ),
-          ],
-        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

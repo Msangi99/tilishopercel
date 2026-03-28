@@ -244,14 +244,18 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              color: AppColors.redBar,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Column(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppColors.redBar,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(
                   children: [
                     // Red header: logo (white bg) + slogan, downward radius
                     Container(
@@ -440,9 +444,12 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
-            ),
+            );
+        },
+      ),
     );
   }
 

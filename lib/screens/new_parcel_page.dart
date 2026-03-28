@@ -565,14 +565,23 @@ class _NewParcelPageState extends State<NewParcelPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: _loadData,
+            onPressed: _handleRefresh,
             tooltip: 'Refresh',
           ),
         ],
       ),
-      body: _isDataLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: AppColors.redBar,
+            onRefresh: _handleRefresh,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: _isDataLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildWizardBanner(
@@ -871,7 +880,12 @@ class _NewParcelPageState extends State<NewParcelPage> {
                 ),
                 _buildWizardBottomBar(),
               ],
-            ),
+                    ),
+                  ),
+                ),
+            );
+        },
+      ),
     );
   }
 
@@ -1641,6 +1655,8 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
     );
   }
 
+  Future<void> _summaryRefresh() async {}
+
   @override
   Widget build(BuildContext context) {
     final s = widget.snapshot;
@@ -1661,12 +1677,26 @@ class _ParcelCreateFlowPageState extends State<_ParcelCreateFlowPage> {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Close',
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
+            onPressed: () {
+              _summaryRefresh();
+            },
+          ),
+        ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: _buildSummaryStep(s),
+        child: RefreshIndicator(
+          color: AppColors.redBar,
+          onRefresh: _summaryRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: _buildSummaryStep(s),
+          ),
         ),
       ),
     );

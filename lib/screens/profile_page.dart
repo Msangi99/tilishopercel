@@ -139,33 +139,56 @@ class _ProfilePageState extends State<ProfilePage> {
         title: Text('Profile', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         backgroundColor: AppColors.redBar,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: (_isLoading || _isSaving) ? null : _loadUser,
+          ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: Colors.red.shade700)),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadUser,
-                          child: const Text('Retry'),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return RefreshIndicator(
+            color: AppColors.redBar,
+            onRefresh: _loadUser,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: _isLoading
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(48),
+                          child: CircularProgressIndicator(),
                         ),
-                      ],
-                    ),
-                  ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
+                      )
+                    : _error != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(_error!,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.red.shade700)),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: _loadUser,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
                         Text(
                           'Change your information',
                           style: GoogleFonts.poppins(
@@ -282,6 +305,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                 ),
+              ),
+            ),
+            );
+        },
+      ),
     );
   }
 

@@ -169,7 +169,13 @@ class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProvider
           _buildTabs(),
           _buildDateFilter(isToday),
           _buildFiltersRow(),
-          Expanded(child: _buildBody()),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return _buildBody(constraints.maxHeight);
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -296,32 +302,52 @@ class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProvider
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double viewportHeight) {
     if (_isLoading && _parcels.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return RefreshIndicator(
+        color: AppColors.redBar,
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: viewportHeight,
+            child: const Center(child: CircularProgressIndicator()),
+          ),
+        ),
+      );
     }
 
     if (_error != null && _parcels.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.red.shade700),
+      return RefreshIndicator(
+        color: AppColors.redBar,
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: viewportHeight,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+                    const SizedBox(height: 16),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () => _loadPage(1),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () => _loadPage(1),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
+            ),
           ),
         ),
       );
@@ -358,22 +384,32 @@ class _MyParcelsPageState extends State<MyParcelsPage> with SingleTickerProvider
           : _tabIndex == 1
               ? 'Parcels you transported will appear here'
               : 'Parcels you received will appear here';
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              emptyTitle,
-              style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+      return RefreshIndicator(
+        color: AppColors.redBar,
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: viewportHeight,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.shade400),
+                  const SizedBox(height: 16),
+                  Text(
+                    emptyTitle,
+                    style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    emptySub,
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              emptySub,
-              style: TextStyle(color: Colors.grey.shade500),
-            ),
-          ],
+          ),
         ),
       );
     }
