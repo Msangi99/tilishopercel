@@ -42,8 +42,9 @@ class _NewParcelPageState extends State<NewParcelPage> {
   final _parcelNameController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
   final _creatorOfficeController = TextEditingController();
-  
+
   // Selected values
+  String? _selectedCreatorOffice;
   String? _selectedOrigin;
   String? _selectedDestination;
   String _weightBand = 'under_20kg';
@@ -51,16 +52,254 @@ class _NewParcelPageState extends State<NewParcelPage> {
   
   bool _isDataLoading = true; // true until routes are loaded
   List<dynamic> _routes = [];
-  
-  // Unique origins and destinations from routes
-  Set<String> _origins = {};
-  Set<String> _destinations = {};
+
+  /// From `/api/offices` — used for creator office picker.
+  List<String> _officeNames = [];
+
+  /// Route endpoints plus office names — used for From / To pickers.
+  List<String> _routePlaceOptions = [];
   
   @override
   void initState() {
     super.initState();
     _wizardPageController = PageController();
     _loadData();
+  }
+
+  static List<String> _uniqueRouteEndpoints(List<dynamic> routes) {
+    final set = <String>{};
+    for (final route in routes) {
+      if (route is! Map) continue;
+      final m = route.map((k, v) => MapEntry(k.toString(), v));
+      final from = m['from']?.toString().trim();
+      final to = m['to']?.toString().trim();
+      if (from != null && from.isNotEmpty) set.add(from);
+      if (to != null && to.isNotEmpty) set.add(to);
+    }
+    final list = set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  static List<String> _parseOfficeNames(List<dynamic> offices) {
+    final set = <String>{};
+    for (final o in offices) {
+      if (o is! Map) continue;
+      final m = o.map((k, v) => MapEntry(k.toString(), v));
+      final n = m['name']?.toString().trim();
+      if (n != null && n.isNotEmpty) set.add(n);
+    }
+    final list = set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
+  static List<String> _mergeUniqueSorted(List<String> a, List<String> b) {
+    final set = <String>{...a, ...b};
+    final list = set.toList()
+      ..sort((x, y) => x.toLowerCase().compareTo(y.toLowerCase()));
+    return list;
+  }
+
+  Future<String?> _openLocationPicker({
+    required String title,
+    required List<String> options,
+    String? currentValue,
+  }) async {
+    if (options.isEmpty) return null;
+    final searchController = TextEditingController();
+    List<String> filtered = List<String>.from(options);
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void applyFilter(String q) {
+              final lower = q.trim().toLowerCase();
+              filtered = lower.isEmpty
+                  ? List<String>.from(options)
+                  : options
+                      .where((e) => e.toLowerCase().contains(lower))
+                      .toList();
+              setModalState(() {});
+            }
+
+            final maxH = MediaQuery.sizeOf(context).height * 0.78;
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: SizedBox(
+                height: maxH,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                      child: Text(
+                        title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: searchController,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search…',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          isDense: true,
+                        ),
+                        onChanged: applyFilter,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No matches',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (ctx, i) {
+                                final item = filtered[i];
+                                final selected = item == currentValue;
+                                return ListTile(
+                                  title: Text(
+                                    item,
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: selected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                  trailing: selected
+                                      ? Icon(Icons.check_circle_rounded,
+                                          color: AppColors.primaryBlue)
+                                      : null,
+                                  onTap: () =>
+                                      Navigator.of(sheetContext).pop(item),
+                                );
+                              },
+                            ),
+                    ),
+                    SizedBox(height: MediaQuery.paddingOf(context).bottom + 8),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    searchController.dispose();
+    return picked;
+  }
+
+  Widget _buildSearchableLocationField({
+    required String label,
+    required IconData icon,
+    required List<String> options,
+    required String? value,
+    required void Function(String?) onChanged,
+    String? Function(String?)? validator,
+    required String pickerTitle,
+  }) {
+    if (options.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return FormField<String>(
+      key: ValueKey('$label-$value'),
+      initialValue: value,
+      validator: validator,
+      builder: (state) {
+        final display = value?.isNotEmpty == true ? value! : null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              label: label,
+              button: true,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await _openLocationPicker(
+                      title: pickerTitle,
+                      options: options,
+                      currentValue: value,
+                    );
+                    if (picked != null) {
+                      state.didChange(picked);
+                      onChanged(picked);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: label,
+                      prefixIcon: Icon(icon, size: 20),
+                      suffixIcon: Icon(
+                        Icons.arrow_drop_down_rounded,
+                        color: Colors.grey.shade700,
+                      ),
+                      errorText: state.errorText,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: Colors.blue.shade700, width: 2),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.red),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 4),
+                      child: Text(
+                        display ?? 'Tap to select',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: display != null
+                              ? Colors.black87
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _wizardSnack(String message) {
@@ -123,27 +362,38 @@ class _NewParcelPageState extends State<NewParcelPage> {
     try {
       final results = await Future.wait([
         ApiService.getRoutes(),
+        ApiService.getOffices(),
       ]);
-      
+
       if (mounted) {
         setState(() {
           _routes = List<dynamic>.from(results[0]);
-          
-          // Extract unique origins and destinations from routes
-          _origins = {};
-          _destinations = {};
-          for (var route in _routes) {
-            final from = route is Map ? route['from'] : null;
-            final to = route is Map ? route['to'] : null;
-            if (from != null && from.toString().isNotEmpty) _origins.add(from.toString());
-            if (to != null && to.toString().isNotEmpty) _destinations.add(to.toString());
-          }
-          
-          // Set default origin and destination from first route
+          _officeNames = _parseOfficeNames(List<dynamic>.from(results[1]));
+          _routePlaceOptions = _mergeUniqueSorted(
+            _uniqueRouteEndpoints(_routes),
+            _officeNames,
+          );
+
           if (_routes.isNotEmpty && _routes.first is Map) {
             final first = _routes.first as Map;
-            _selectedOrigin = first['from']?.toString();
-            _selectedDestination = first['to']?.toString();
+            final from = first['from']?.toString();
+            final to = first['to']?.toString();
+            _selectedOrigin =
+                from != null && _routePlaceOptions.contains(from) ? from : null;
+            _selectedDestination =
+                to != null && _routePlaceOptions.contains(to) ? to : null;
+            if (_selectedOrigin == null && _routePlaceOptions.isNotEmpty) {
+              _selectedOrigin = _routePlaceOptions.first;
+            }
+            if (_selectedDestination == null && _routePlaceOptions.length > 1) {
+              _selectedDestination = _routePlaceOptions[1];
+            } else if (_selectedDestination == null &&
+                _routePlaceOptions.isNotEmpty) {
+              _selectedDestination = _routePlaceOptions.first;
+            }
+          } else {
+            _selectedOrigin = null;
+            _selectedDestination = null;
           }
           _isDataLoading = false;
         });
@@ -153,7 +403,8 @@ class _NewParcelPageState extends State<NewParcelPage> {
         setState(() => _isDataLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading buses/routes: ${e.toString().replaceFirst('Exception: ', '')}'),
+            content: Text(
+                'Error loading routes/offices: ${e.toString().replaceFirst('Exception: ', '')}'),
             backgroundColor: Colors.redAccent,
             duration: const Duration(seconds: 4),
           ),
@@ -210,7 +461,9 @@ class _NewParcelPageState extends State<NewParcelPage> {
       parcelName: _parcelNameController.text.trim(),
       quantity: qty,
       weightBand: _weightBand,
-      creatorOffice: _creatorOfficeController.text.trim(),
+      creatorOffice: _officeNames.isNotEmpty
+          ? (_selectedCreatorOffice ?? '')
+          : _creatorOfficeController.text.trim(),
       senderName: _senderNameController.text.trim(),
       senderPhone: _senderPhoneController.text.trim(),
       senderEmail: _senderEmailController.text.trim().isEmpty
@@ -253,10 +506,25 @@ class _NewParcelPageState extends State<NewParcelPage> {
             _creatorOfficeController.clear();
             if (_routes.isNotEmpty && _routes.first is Map) {
               final first = _routes.first as Map;
+              final from = first['from']?.toString();
+              final to = first['to']?.toString();
               setState(() {
                 _wizardStep = 0;
-                _selectedOrigin = first['from']?.toString();
-                _selectedDestination = first['to']?.toString();
+                _selectedCreatorOffice = null;
+                _selectedOrigin =
+                    from != null && _routePlaceOptions.contains(from)
+                        ? from
+                        : (_routePlaceOptions.isNotEmpty
+                            ? _routePlaceOptions.first
+                            : null);
+                _selectedDestination =
+                    to != null && _routePlaceOptions.contains(to)
+                        ? to
+                        : (_routePlaceOptions.length > 1
+                            ? _routePlaceOptions[1]
+                            : _routePlaceOptions.isNotEmpty
+                                ? _routePlaceOptions.first
+                                : null);
               });
               _wizardPageController.jumpToPage(0);
             }
@@ -366,17 +634,33 @@ class _NewParcelPageState extends State<NewParcelPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                _buildTextField(
-                                  controller: _creatorOfficeController,
-                                  label: 'Creator office',
-                                  icon: Icons.storefront_outlined,
-                                  validator: (value) {
-                                    if (value == null || value.trim().isEmpty) {
-                                      return 'Enter office name';
-                                    }
-                                    return null;
-                                  },
-                                ),
+                                if (_officeNames.isNotEmpty)
+                                  _buildSearchableLocationField(
+                                    label: 'Creator office',
+                                    icon: Icons.storefront_outlined,
+                                    options: _officeNames,
+                                    value: _selectedCreatorOffice,
+                                    pickerTitle: 'Select creator office',
+                                    onChanged: (v) =>
+                                        setState(() => _selectedCreatorOffice = v),
+                                    validator: (v) =>
+                                        v == null || v.isEmpty
+                                            ? 'Select creator office'
+                                            : null,
+                                  )
+                                else
+                                  _buildTextField(
+                                    controller: _creatorOfficeController,
+                                    label: 'Creator office',
+                                    icon: Icons.storefront_outlined,
+                                    validator: (value) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return 'Enter office name';
+                                      }
+                                      return null;
+                                    },
+                                  ),
                               ],
                             ),
                           ),
@@ -514,32 +798,42 @@ class _NewParcelPageState extends State<NewParcelPage> {
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Expanded(
-                                            child: _buildDropdown(
+                                            child: _buildSearchableLocationField(
                                               label: 'From',
-                                              hint: 'Select origin',
-                                              items: _origins.toList(),
+                                              icon: Icons.place_outlined,
+                                              options: _routePlaceOptions,
                                               value: _selectedOrigin,
+                                              pickerTitle: 'Select origin',
                                               onChanged: (value) {
-                                                setState(() => _selectedOrigin = value);
+                                                setState(
+                                                    () => _selectedOrigin = value);
                                               },
                                               validator: (v) =>
-                                                  v == null || v.isEmpty ? 'Select origin' : null,
+                                                  v == null || v.isEmpty
+                                                      ? 'Select origin'
+                                                      : null,
                                             ),
                                           ),
                                           const SizedBox(width: 12),
                                           Expanded(
-                                            child: _buildDropdown(
+                                            child: _buildSearchableLocationField(
                                               label: 'To',
-                                              hint: 'Select destination',
-                                              items: _destinations.toList(),
+                                              icon: Icons.flag_rounded,
+                                              options: _routePlaceOptions,
                                               value: _selectedDestination,
+                                              pickerTitle: 'Select destination',
                                               onChanged: (value) {
-                                                setState(() => _selectedDestination = value);
+                                                setState(() =>
+                                                    _selectedDestination = value);
                                               },
                                               validator: (v) =>
-                                                  v == null || v.isEmpty ? 'Select destination' : null,
+                                                  v == null || v.isEmpty
+                                                      ? 'Select destination'
+                                                      : null,
                                             ),
                                           ),
                                         ],
@@ -862,43 +1156,6 @@ class _NewParcelPageState extends State<NewParcelPage> {
     );
   }
 
-  Widget _buildDropdown({
-    required String label,
-    String? hint,
-    required List<String> items,
-    required String? value,
-    required ValueChanged<String?> onChanged,
-    String? Function(String?)? validator,
-  }) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      hint: hint != null ? Text(hint) : null,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.list, size: 20),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
-        ),
-      ),
-      icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-      isExpanded: true,
-      items: items.map((item) => DropdownMenuItem(
-        value: item,
-        child: Text(item),
-      )).toList(),
-      onChanged: onChanged,
-      validator: validator,
-    );
-  }
-  
   @override
   void dispose() {
     _wizardPageController.dispose();

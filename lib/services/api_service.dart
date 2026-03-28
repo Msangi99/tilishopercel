@@ -532,6 +532,44 @@ class ApiService {
     throw Exception(msg ?? 'Could not load routes (${response.statusCode})');
   }
 
+  /// Offices / intermediate stations (admin-managed).
+  static Future<List<dynamic>> getOffices() async {
+    final headers = await _authHeaders();
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/offices'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 401) {
+      await _clearAuth();
+      throw Exception('Session expired. Please sign in again.');
+    }
+
+    if (response.statusCode == 200) {
+      final decoded = _parseJson(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Could not load offices (unexpected response)');
+      }
+      final data = decoded;
+      final status = data['status'] ?? data['Status'];
+      if (status != 'success') {
+        final msg = data['message'] ?? 'Could not load offices';
+        throw Exception(msg);
+      }
+      final dataPayload = data['data'] ?? data['Data'];
+      if (dataPayload is List) return List<dynamic>.from(dataPayload);
+      if (dataPayload is Map) {
+        final offices = dataPayload['offices'] ?? dataPayload['Offices'];
+        if (offices is List) return List<dynamic>.from(offices);
+      }
+      return [];
+    }
+
+    final err = _parseJson(response.body);
+    final msg = err is Map ? err['message'] : null;
+    throw Exception(msg ?? 'Could not load offices (${response.statusCode})');
+  }
+
   static dynamic _parseJson(String body) {
     try {
       return jsonDecode(body);
